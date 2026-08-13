@@ -110,8 +110,10 @@ struct PaletteView: View {
                 HSplitView {
                     itemList
                         .frame(minWidth: 330, idealWidth: 390)
+                        .frame(maxHeight: .infinity)
                     preview
                         .frame(minWidth: 300)
+                        .frame(maxHeight: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -143,10 +145,13 @@ struct PaletteView: View {
                 HSplitView {
                     agentList
                         .frame(minWidth: 210, idealWidth: 235, maxWidth: 290)
+                        .frame(maxHeight: .infinity)
                     conversationPane
                         .frame(minWidth: 300, idealWidth: 350)
+                        .frame(maxHeight: .infinity)
                     preview
                         .frame(minWidth: 320)
+                        .frame(maxHeight: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
