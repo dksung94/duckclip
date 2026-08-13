@@ -35,6 +35,14 @@ Use the compact Quick Paste window when you want something recent. Open the full
 
 > DuckClip is an early release. Review the retention and privacy settings before using it with sensitive information.
 
+## What's new in 0.2
+
+- Write a follow-up beneath any collected agent response and send it back to the session that is still running.
+- Reach the exact local tmux pane even when it is hidden behind another pane, plus cmux, Terminal, and iTerm sessions.
+- Press `Return` while the follow-up field is focused to send the reply instead of triggering the clipboard action.
+- Keep a Rectangle-managed full-screen or half-screen window size while moving between Clipboard and Agents.
+- Open Quick Paste only with `⌃⌘V`; opening the regular library never brings up the compact panel.
+
 ## Quick Paste
 
 <p align="center">
@@ -88,7 +96,7 @@ DuckClip supports macOS 14 or newer.
 2. Open the DMG and drag DuckClip into Applications.
 3. Launch DuckClip, then keep the duck icon in your menu bar.
 
-If macOS warns about an unsigned development build, use a signed and notarized release instead. Official release builds can be notarized when the project’s Apple Developer credentials are configured.
+DuckClip 0.2 is ad-hoc signed but not Apple-notarized. macOS may block its first launch. Open **System Settings → Privacy & Security**, choose **Open Anyway** beside DuckClip, then confirm **Open**. You only need to do this again after installing a newly built release.
 
 DuckClip appears as a duck in the menu bar and does not take up space in the Dock. The first-run guide explains local storage and the default shortcuts.
 
@@ -117,6 +125,8 @@ DuckClip uses each agent’s supported integration surface: native hooks for Cla
 
 Select any collected response to write a follow-up. **Send to Session** finds the process that still owns the matching session file and sends your prompt to that exact local tmux pane, cmux, Terminal, or iTerm surface. A tmux pane does not need to be visible or selected. DuckClip never starts a second writer for an active session, and it stops safely if the original session is no longer running.
 
+Live replies currently target sessions running on the same Mac as DuckClip. Sessions inside tmux on an SSH server need a remote bridge and are not supported yet.
+
 If Codex asks whether a new hook should be trusted, run `/hooks` in Codex and review it there. Event coverage differs by agent version, so some providers may report completed responses but not every approval or input request.
 
 ### Notifications
@@ -141,6 +151,7 @@ Notification previews can show status only, the first line of a response, or no 
 | `⌘1` … `⌘9` | Paste the matching Quick Paste item immediately |
 | `↑` `↓` | Move through items |
 | `Return` | Paste or copy the selected item |
+| `Return` in the follow-up field | Send the reply to the running agent session |
 | `⌘C` | Copy the selected item |
 | `Delete` | Delete the selected item |
 | `⌘Z` | Undo the most recent deletion |
