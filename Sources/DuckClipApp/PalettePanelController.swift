@@ -22,7 +22,10 @@ final class PalettePanelController {
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.isReleasedWhenClosed = false
-        panel.hidesOnDeactivate = true
+        // The full palette is a workspace for reading agent responses and
+        // writing follow-ups, so keep it visible while another app is active.
+        // Quick Paste remains transient and still hides on deactivation.
+        panel.hidesOnDeactivate = false
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.minSize = NSSize(width: 900, height: 480)
