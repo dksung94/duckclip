@@ -5,6 +5,7 @@ import SwiftUI
 final class QuickPastePanelState: ObservableObject {
     @Published var targetName: String?
     @Published var refreshToken = UUID()
+    @Published var isPresented = false
 }
 
 @MainActor
@@ -15,6 +16,7 @@ final class QuickPastePanelController {
     private var targetApplication: NSRunningApplication?
     private var lastExternalApplication: NSRunningApplication?
     private var activationObserver: NSObjectProtocol?
+    private var closeObserver: NSObjectProtocol?
 
     init(model: AppModel) {
         self.model = model
@@ -39,17 +41,27 @@ final class QuickPastePanelController {
             onPaste: { [weak self] item in
                 guard let self else { return }
                 if self.model.paste(item, target: self.targetApplication) {
-                    self.panel.orderOut(nil)
+                    self.hide()
                 }
             },
             onCopy: { [weak self] item in
                 guard let self else { return }
                 if self.model.copy(item) {
-                    self.panel.orderOut(nil)
+                    self.hide()
                 }
             },
-            onDismiss: { [weak panel] in panel?.orderOut(nil) }
+            onDismiss: { [weak self] in self?.hide() }
         ))
+
+        closeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.state.isPresented = false
+            }
+        }
 
         if let frontmost = NSWorkspace.shared.frontmostApplication,
            frontmost.bundleIdentifier != Bundle.main.bundleIdentifier,
@@ -74,6 +86,9 @@ final class QuickPastePanelController {
         if let activationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
         }
+        if let closeObserver {
+            NotificationCenter.default.removeObserver(closeObserver)
+        }
     }
 
     func toggle() {
@@ -85,6 +100,7 @@ final class QuickPastePanelController {
     }
 
     func hide() {
+        state.isPresented = false
         panel.orderOut(nil)
     }
 
@@ -98,6 +114,7 @@ final class QuickPastePanelController {
         targetApplication = currentExternal ?? fallback
         state.targetName = targetApplication?.localizedName
         state.refreshToken = UUID()
+        state.isPresented = true
         model.refreshAccessibilityPermission()
         positionOnActiveScreen()
         NSApplication.shared.activate(ignoringOtherApps: true)

@@ -41,6 +41,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         model?.refreshAccessibilityPermission()
     }
 
+    func applicationDidResignActive(_ notification: Notification) {
+        // Quick Paste is transient. Keep its presentation state in sync with
+        // AppKit when hidesOnDeactivate orders the panel out automatically.
+        quickPastePanelController?.hide()
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showPalette()
         return true

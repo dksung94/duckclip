@@ -47,7 +47,7 @@ struct QuickPasteView: View {
         }
         .onExitCommand(perform: onDismiss)
         .alert("DuckClip", isPresented: Binding(
-            get: { model.errorMessage != nil },
+            get: { state.isPresented && model.errorMessage != nil },
             set: { if !$0 { model.dismissError() } }
         )) {
             if model.accessibilityPermissionRequired {
