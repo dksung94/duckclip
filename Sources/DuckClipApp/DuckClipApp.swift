@@ -47,11 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func showPalette() {
+        quickPastePanelController?.hide()
         panelController?.show()
-    }
-
-    func showQuickPaste() {
-        quickPastePanelController?.show()
     }
 
     func retryStartup() {
@@ -77,11 +74,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             let quickPastePanelController = QuickPastePanelController(model: model)
             self.panelController = panelController
             self.quickPastePanelController = quickPastePanelController
-            model.openPalette = { [weak panelController] itemID in
+            model.openPalette = { [weak panelController, weak quickPastePanelController] itemID in
+                quickPastePanelController?.hide()
                 panelController?.show(selecting: itemID)
             }
-            hotKey.onInvoke = { [weak panelController] in panelController?.toggle() }
-            quickPasteHotKey.onInvoke = { [weak quickPastePanelController] in quickPastePanelController?.toggle() }
+            hotKey.onInvoke = { [weak panelController, weak quickPastePanelController] in
+                quickPastePanelController?.hide()
+                panelController?.toggle()
+            }
+            quickPasteHotKey.onInvoke = { [weak panelController, weak quickPastePanelController] in
+                panelController?.hide()
+                quickPastePanelController?.toggle()
+            }
             registerHotKey(model.settings.globalShortcut)
             model.quickPasteShortcutRegistrationSucceeded = quickPasteHotKey.registerQuickPaste()
             cancellables.removeAll()
@@ -91,12 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 .sink { [weak self] shortcut in self?.registerHotKey(shortcut) }
                 .store(in: &cancellables)
             model.start()
-            if CommandLine.arguments.contains("--show-quick-paste") {
-                Task { @MainActor [weak quickPastePanelController] in
-                    try? await Task.sleep(for: .milliseconds(250))
-                    quickPastePanelController?.show()
-                }
-            } else if !model.settings.hasCompletedOnboarding || CommandLine.arguments.contains("--show-palette") {
+            if !model.settings.hasCompletedOnboarding || CommandLine.arguments.contains("--show-palette") {
                 Task { @MainActor [weak panelController] in
                     try? await Task.sleep(for: .milliseconds(250))
                     panelController?.show()
@@ -123,8 +122,7 @@ private struct MenuBarRoot: View {
         if let model = delegate.model {
             MenuBarContent(
                 model: model,
-                showPalette: delegate.showPalette,
-                showQuickPaste: delegate.showQuickPaste
+                showPalette: delegate.showPalette
             )
         } else if let error = delegate.startupError {
             Text("DuckClip could not start")
@@ -213,18 +211,15 @@ private struct MenuBarContent: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var settings: DuckClipSettings
     let showPalette: () -> Void
-    let showQuickPaste: () -> Void
 
-    init(model: AppModel, showPalette: @escaping () -> Void, showQuickPaste: @escaping () -> Void) {
+    init(model: AppModel, showPalette: @escaping () -> Void) {
         self.model = model
         _settings = ObservedObject(wrappedValue: model.settings)
         self.showPalette = showPalette
-        self.showQuickPaste = showQuickPaste
     }
 
     var body: some View {
         Button("Open DuckClip (\(settings.globalShortcut.displayName))") { showPalette() }
-        Button(String(format: String(localized: "Quick Paste (%@)"), "⌃⌘V")) { showQuickPaste() }
         if !model.shortcutRegistrationSucceeded {
             Label("The selected shortcut is unavailable", systemImage: "exclamationmark.triangle.fill")
         }

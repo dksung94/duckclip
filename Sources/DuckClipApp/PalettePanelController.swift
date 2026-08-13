@@ -83,10 +83,14 @@ final class PalettePanelController {
 
     func toggle(selecting itemID: String? = nil) {
         if panel.isVisible && itemID == nil {
-            panel.orderOut(nil)
+            hide()
             return
         }
         show(selecting: itemID)
+    }
+
+    func hide() {
+        panel.orderOut(nil)
     }
 
     func show(selecting itemID: String? = nil) {

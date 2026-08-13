@@ -78,13 +78,17 @@ final class QuickPastePanelController {
 
     func toggle() {
         if panel.isVisible {
-            panel.orderOut(nil)
+            hide()
         } else {
             show()
         }
     }
 
-    func show() {
+    func hide() {
+        panel.orderOut(nil)
+    }
+
+    private func show() {
         let bundleID = Bundle.main.bundleIdentifier
         let frontmost = NSWorkspace.shared.frontmostApplication
         let currentExternal = frontmost.flatMap { app in
