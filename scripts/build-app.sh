@@ -10,6 +10,8 @@ macos_dir="$contents_dir/MacOS"
 resources_dir="$contents_dir/Resources"
 
 cd "$repo_dir"
+mkdir -p "$repo_dir/dist"
+touch "$repo_dir/dist/.metadata_never_index"
 swift build -c "$configuration" --product DuckClip
 swift build -c "$configuration" --product duckclip-hook
 

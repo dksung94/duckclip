@@ -207,6 +207,28 @@ func checkHistoryParsers() throws {
     try require(claudeItems.count == 1 && claudeItems.first?.text == "complete", "Claude history parsing failed")
 }
 
+func checkAgentReplies() throws {
+    let prompt = "Continue from DuckClip"
+    let codex = try AgentSessionReply.request(
+        provider: .codex,
+        sessionID: "session-codex",
+        prompt: prompt
+    )
+    try require(codex.sessionID == "session-codex", "Codex live session ID is incorrect")
+    let openFiles = """
+    p10760
+    ccodex
+    n/Users/example/.codex/sessions/rollout-session-codex.jsonl
+    """
+    try require(
+        AgentSessionReply.processCandidates(
+            fromOpenFileList: openFiles,
+            sessionID: codex.sessionID
+        ).first?.processID == 10760,
+        "The live Codex process was not found from its open session file"
+    )
+}
+
 func checkHookInstaller() throws {
     try withTemporaryDirectory { root in
         let helper = root.appendingPathComponent("duckclip-hook")
@@ -269,8 +291,9 @@ do {
     try checkStore()
     try checkAgentEvents()
     try checkHistoryParsers()
+    try checkAgentReplies()
     try checkHookInstaller()
-    print("DuckClip checks passed: store, search, seven agent integrations, events, and history import")
+    print("DuckClip checks passed: store, search, seven agent integrations, replies, events, and history import")
 } catch {
     FileHandle.standardError.write(Data("DuckClip check failed: \(error.localizedDescription)\n".utf8))
     exit(EXIT_FAILURE)

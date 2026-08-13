@@ -61,6 +61,7 @@ Press `⇧⌘V` when you need the complete DuckClip library.
 
 - Search across clipboard history and agent responses.
 - Filter by source and project.
+- Reply directly to the terminal tab that is still running an agent conversation.
 - Pin important items above the regular timeline.
 - Preview screenshots with their dimensions and file size.
 - Preview URLs and copied files before using them.
@@ -113,6 +114,8 @@ To connect your coding agents:
 4. Use the **Test** button beside each provider to confirm that events are arriving.
 
 DuckClip uses each agent’s supported integration surface: native hooks for Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, and Cursor; a Gajae Code extension; and an OpenCode plugin. It preserves existing hook settings and only manages its own entries and files.
+
+Select any collected response to write a follow-up. **Send to Session** finds the process that still owns the matching session file and sends your prompt to that exact local tmux pane, cmux, Terminal, or iTerm surface. A tmux pane does not need to be visible or selected. DuckClip never starts a second writer for an active session, and it stops safely if the original session is no longer running.
 
 If Codex asks whether a new hook should be trusted, run `/hooks` in Codex and review it there. Event coverage differs by agent version, so some providers may report completed responses but not every approval or input request.
 

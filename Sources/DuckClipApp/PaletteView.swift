@@ -408,10 +408,15 @@ struct PaletteView: View {
                 case .url:
                     URLPreview(item: item)
                 case .agentResponse:
-                    ScrollView {
-                        MarkdownPreview(markdown: item.text)
-                            .padding(.trailing, 8)
+                    VStack(spacing: 10) {
+                        ScrollView {
+                            MarkdownPreview(markdown: item.text)
+                                .padding(.trailing, 8)
+                        }
+                        Divider()
+                        agentReplyComposer(for: item)
                     }
+                    .frame(maxHeight: .infinity, alignment: .top)
                 case .text:
                     ScrollView {
                         Text(item.text)
@@ -420,7 +425,9 @@ struct PaletteView: View {
                             .padding(.trailing, 8)
                     }
                 }
-                Spacer(minLength: 0)
+                if item.kind != .agentResponse {
+                    Spacer(minLength: 0)
+                }
             }
             .padding(16)
         } else {
@@ -429,6 +436,47 @@ struct PaletteView: View {
                 systemImage: "cursorarrow.click"
             )
         }
+    }
+
+    private func agentReplyComposer(for item: ClipItem) -> some View {
+        let unavailableReason = model.agentReplyUnavailableReason(for: item)
+        let hasPrompt = !model.agentReplyDraft
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+
+        return VStack(alignment: .leading, spacing: 8) {
+            Label("Reply to this session", systemImage: "arrowshape.turn.up.left.fill")
+                .font(.subheadline.weight(.semibold))
+
+            TextField("Write a follow-up…", text: $model.agentReplyDraft, axis: .vertical)
+                .lineLimit(2...5)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(.quaternary.opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
+                .disabled(model.isSendingAgentReply)
+
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(unavailableReason ?? String(localized: "Sends directly to the terminal tab that owns this live session."))
+                    .font(.caption)
+                    .foregroundStyle(unavailableReason == nil ? Color.secondary : Color.orange)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                Button {
+                    model.sendAgentReply(to: item)
+                } label: {
+                    if model.isSendingAgentReply {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label("Send to Session", systemImage: "paperplane.fill")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(unavailableReason != nil || !hasPrompt || model.isSendingAgentReply)
+            }
+        }
+        .accessibilityElement(children: .contain)
     }
 
     private func metadata(for item: ClipItem) -> some View {

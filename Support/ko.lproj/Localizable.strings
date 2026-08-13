@@ -223,6 +223,17 @@
 "Choose an agent to see its conversation history." = "대화 기록을 보려면 에이전트를 선택하세요.";
 "Select a conversation" = "대화를 선택하세요";
 "%lld responses" = "응답 %lld개";
+"Reply to this session" = "이 세션에 답장";
+"Write a follow-up…" = "후속 요청 작성…";
+"Send to Session" = "세션으로 보내기";
+"Sends directly to the terminal tab that owns this live session." = "이 실행 중인 세션을 소유한 터미널 탭으로 바로 전송합니다.";
+"This response does not include a live session ID." = "이 응답에는 실행 중인 세션 ID가 없습니다.";
+"Enter a reply first." = "먼저 답장을 입력하세요.";
+"This source does not support session replies." = "이 소스는 세션 답장을 지원하지 않습니다.";
+"reply.error.not_running" = "%@ 세션이 더 이상 터미널에서 실행 중이지 않습니다.";
+"reply.error.terminal_unsupported" = "실행 중인 세션을 %@에서 찾았지만 해당 tmux pane, cmux, Terminal 또는 iTerm 화면을 찾지 못했습니다.";
+"reply.error.delivery" = "실행 중인 터미널 세션으로 답장을 보내지 못했습니다: %@";
+"reply.sent" = "실행 중인 %@ 세션으로 답장을 보냈습니다.";
 
 /* Quick Paste */
 "Quick Paste (%@)" = "빠른 붙여넣기 (%@)";

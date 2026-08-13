@@ -77,7 +77,14 @@ final class AppModel: ObservableObject {
             reload(refreshSessions: false)
         }
     }
-    @Published var selectedItemID: String?
+    @Published var selectedItemID: String? {
+        didSet {
+            guard selectedItemID != oldValue else { return }
+            agentReplyDraft = ""
+        }
+    }
+    @Published var agentReplyDraft = ""
+    @Published var isSendingAgentReply = false
     @Published var errorMessage: String?
     @Published var passiveStatusMessage: String?
     @Published var paletteNotice: PaletteNotice?
@@ -108,6 +115,7 @@ final class AppModel: ObservableObject {
     private let inboxMonitor: AgentInboxMonitor
     private let hookInstaller: HookInstaller
     private let historyImporter: HistoryImporter
+    private let agentReplyLauncher = AgentReplyLauncher()
     private let notifications = NotificationCoordinator()
     private var reloadTask: Task<Void, Never>?
     private var reloadGeneration = 0
@@ -303,6 +311,35 @@ final class AppModel: ObservableObject {
 
     func dismissAgentActivityNotice() {
         agentActivityNotice = nil
+    }
+
+    func agentReplyUnavailableReason(for item: ClipItem) -> String? {
+        agentReplyLauncher.unavailableReason(for: item)
+    }
+
+    func sendAgentReply(to item: ClipItem) {
+        guard !isSendingAgentReply else { return }
+        let prompt = agentReplyDraft
+        isSendingAgentReply = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { isSendingAgentReply = false }
+            do {
+                try await agentReplyLauncher.send(item: item, prompt: prompt)
+                if selectedItemID == item.id {
+                    agentReplyDraft = ""
+                }
+                showPassiveStatus(String(
+                    format: String(
+                        localized: "reply.sent",
+                        defaultValue: "Sent the reply to the live %@ session."
+                    ),
+                    item.source.displayName
+                ))
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     func refreshIntegrationStatus() {

@@ -31,5 +31,7 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>DuckClip sends your follow-up to the terminal tab running the selected coding-agent session.</string>
 </dict>
 </plist>
