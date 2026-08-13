@@ -59,8 +59,18 @@ final class PalettePanelController {
         // intrinsic sizes inside the window instead of allowing SwiftUI to
         // overwrite a frame chosen by the user or a window manager.
         hostingView.sizingOptions = []
-        hostingView.autoresizingMask = [.width, .height]
-        panel.contentView = hostingView
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+
+        let contentContainer = NSView(frame: panel.contentLayoutRect)
+        contentContainer.autoresizingMask = [.width, .height]
+        contentContainer.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            hostingView.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: contentContainer.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor)
+        ])
+        panel.contentView = contentContainer
 
         if let frontmost = NSWorkspace.shared.frontmostApplication,
            frontmost.bundleIdentifier != Bundle.main.bundleIdentifier,
