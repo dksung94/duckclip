@@ -24,11 +24,12 @@
   <img alt="macOS 14 or newer" src="https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white">
   <img alt="Local first" src="https://img.shields.io/badge/data-local--first-20B2AA">
   <img alt="Menu bar app" src="https://img.shields.io/badge/app-menu%20bar-FFD43B">
+  <a href="https://github.com/dksung94/duckclip/releases/latest"><img alt="Download latest release" src="https://img.shields.io/github/v/release/dksung94/duckclip?display_name=release&label=download&color=6f42c1"></a>
 </p>
 
 ---
 
-DuckClip remembers text, links, files, and images you copy. It can also collect finished responses from Claude Code and Codex, so useful answers do not disappear into old sessions.
+DuckClip remembers text, links, files, and images you copy. It can also collect finished responses from Claude Code, Codex, Gajae Code, Gemini CLI, GitHub Copilot CLI, Cursor, and OpenCode, so useful answers do not disappear into old sessions.
 
 Use the compact Quick Paste window when you want something recent. Open the full library when you need to search deeper or browse agent conversations.
 
@@ -73,23 +74,20 @@ The clipboard view uses a simple list and preview. The Agents view uses three cl
 | --- | --- |
 | A recent copy is replaced before you paste it | Keeping a searchable history, with pinned items at the top |
 | Screenshots all look alike | Showing thumbnails, dimensions, file size, and source app |
-| Claude and Codex answers are spread across sessions | Organizing them as agent → conversation → response |
+| Coding-agent answers are spread across tools and sessions | Organizing them as agent → conversation → response |
 | You only need the thing you copied a moment ago | Letting you paste it with `⌘1` through `⌘9` in Quick Paste |
 | An agent finishes or needs your attention | Sending optional completion, input, approval, and failure notifications |
 | You are unsure where an item will go | Naming the destination app before paste |
 
 ## Get started
 
-DuckClip currently supports macOS 14 or newer. Until packaged downloads are available, build the app with Swift 6 and the Xcode Command Line Tools:
+DuckClip supports macOS 14 or newer.
 
-```bash
-git clone https://github.com/dksung94/duckclip.git
-cd duckclip
+1. Download the latest `DuckClip-*.dmg` from [GitHub Releases](https://github.com/dksung94/duckclip/releases/latest).
+2. Open the DMG and drag DuckClip into Applications.
+3. Launch DuckClip, then keep the duck icon in your menu bar.
 
-./scripts/build-app.sh
-ditto dist/DuckClip.app /Applications/DuckClip.app
-open /Applications/DuckClip.app
-```
+If macOS warns about an unsigned development build, use a signed and notarized release instead. Official release builds can be notarized when the project’s Apple Developer credentials are configured.
 
 DuckClip appears as a duck in the menu bar and does not take up space in the Dock. The first-run guide explains local storage and the default shortcuts.
 
@@ -100,21 +98,23 @@ Automatic paste needs macOS Accessibility permission. DuckClip asks for it only 
 - Text and URLs
 - Files copied from Finder
 - Screenshots and other clipboard images
-- Final responses from Claude Code
-- Final responses from Codex
+- Final responses from Claude Code, Codex, Gajae Code, Gemini CLI, GitHub Copilot CLI, Cursor, and OpenCode
 - The project, agent, and session information attached to those responses
 
 Unpinned items can be kept for 1 to 365 days. You choose the retention period in Settings.
 
 ## Agent inbox
 
-To connect Claude Code and Codex:
+To connect your coding agents:
 
 1. Open **Settings → Agents → Connections**.
 2. Select **Install or Update Integrations**.
-3. Use the **Test** button beside each provider to confirm that events are arriving.
+3. Restart any agent that was already open.
+4. Use the **Test** button beside each provider to confirm that events are arriving.
 
-If Codex asks whether a new hook should be trusted, run `/hooks` in Codex and review it there. DuckClip preserves your existing hooks and only manages its own entries.
+DuckClip uses each agent’s supported integration surface: native hooks for Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, and Cursor; a Gajae Code extension; and an OpenCode plugin. It preserves existing hook settings and only manages its own entries and files.
+
+If Codex asks whether a new hook should be trusted, run `/hooks` in Codex and review it there. Event coverage differs by agent version, so some providers may report completed responses but not every approval or input request.
 
 ### Notifications
 
@@ -122,12 +122,12 @@ Open **Settings → Agents → Notifications** to choose exactly which events sh
 
 | Notification | What it means |
 | --- | --- |
-| Response completed | Claude Code or Codex finished a response |
+| Response completed | A connected coding agent finished a response |
 | Waiting for your input | The agent needs a choice or more information |
 | Approval required | A tool or permission is waiting for approval |
 | Agent failed | The agent stopped because of an error |
 
-Notification previews can show status only, the first line of a response, or no response content. Each notification type has its own test action. Available events can vary with the installed Claude Code or Codex hook version.
+Notification previews can show status only, the first line of a response, or no response content. Each notification type has its own test action. Available events can vary with the installed agent version.
 
 ## Keyboard shortcuts
 

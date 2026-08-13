@@ -25,6 +25,22 @@ func withTemporaryDirectory<T>(_ body: (URL) throws -> T) throws -> T {
     return try body(directory)
 }
 
+func validateBunModule(at url: URL, output: URL) throws {
+    guard let bun = ProcessInfo.processInfo.environment["PATH"]?
+        .split(separator: ":")
+        .map({ URL(fileURLWithPath: String($0)).appendingPathComponent("bun") })
+        .first(where: { FileManager.default.isExecutableFile(atPath: $0.path) })
+    else { return }
+    let process = Process()
+    process.executableURL = bun
+    process.arguments = ["build", url.path, "--target=bun", "--outfile=\(output.path)"]
+    process.standardOutput = Pipe()
+    process.standardError = Pipe()
+    try process.run()
+    process.waitUntilExit()
+    try require(process.terminationStatus == 0, "Generated module is not valid: \(url.path)")
+}
+
 func checkStore() throws {
     try withTemporaryDirectory { directory in
         let store = try SQLiteStore(url: directory.appendingPathComponent("test.sqlite3"))
@@ -50,7 +66,7 @@ func checkStore() throws {
         try require(store.insert(agent), "Agent insert failed")
         try require(try store.search(query: "BalanceLocker").map(\.id) == [agent.id], "FTS search failed")
         try require(try store.search(source: .clipboard).map(\.id) == [clipboard.id], "Source filter failed")
-        try require(try store.search(sources: [.claude, .codex]).map(\.id) == [agent.id], "Agent source filter failed")
+        try require(try store.search(sources: ItemSource.agentSources).map(\.id) == [agent.id], "Agent source filter failed")
         try require(try store.search(agentID: "agent-9").map(\.id) == [agent.id], "Agent ID filter failed")
         let markdownAgent = ClipItem(
             kind: .agentResponse,
@@ -117,6 +133,61 @@ func checkAgentEvents() throws {
         ]
     ])
     try require(try AgentEventParser.parse(envelope: codexInput).kind == .inputRequired, "Codex input request parsing failed")
+
+    let gemini = try JSONSerialization.data(withJSONObject: [
+        "provider": "gemini",
+        "event": "after-agent",
+        "payload": [
+            "hook_event_name": "AfterAgent",
+            "session_id": "gemini-session",
+            "prompt_response": "Gemini finished this response."
+        ]
+    ])
+    try require(try AgentEventParser.parse(envelope: gemini).clipItem?.text == "Gemini finished this response.", "Gemini response parsing failed")
+
+    let cursor = try JSONSerialization.data(withJSONObject: [
+        "provider": "cursor",
+        "event": "after-agent-response",
+        "payload": [
+            "hook_event_name": "afterAgentResponse",
+            "conversation_id": "cursor-conversation",
+            "generation_id": "cursor-generation",
+            "workspace_roots": ["/tmp/cursor-project"],
+            "text": "Cursor finished this response."
+        ]
+    ])
+    let cursorEvent = try AgentEventParser.parse(envelope: cursor)
+    try require(cursorEvent.clipItem?.text == "Cursor finished this response.", "Cursor response parsing failed")
+    try require(cursorEvent.clipItem?.agentTurnID == "cursor-generation", "Cursor generation ID parsing failed")
+
+    let openCodePermission = try JSONSerialization.data(withJSONObject: [
+        "provider": "opencode",
+        "event": "permission-request",
+        "payload": ["hook_event_name": "permission-request", "session_id": "open-code-session"]
+    ])
+    try require(try AgentEventParser.parse(envelope: openCodePermission).kind == .approvalRequired, "OpenCode permission parsing failed")
+
+    try withTemporaryDirectory { directory in
+        let transcript = directory.appendingPathComponent("copilot.jsonl")
+        let rows = [
+            #"{"role":"user","content":"please fix it"}"#,
+            #"{"role":"assistant","content":[{"type":"text","text":"Copilot finished from transcript."}]}"#
+        ].joined(separator: "\n")
+        try Data(rows.utf8).write(to: transcript)
+        let copilot = try JSONSerialization.data(withJSONObject: [
+            "provider": "copilot",
+            "event": "agent-stop",
+            "payload": [
+                "hook_event_name": "agentStop",
+                "sessionId": "copilot-session",
+                "transcriptPath": transcript.path
+            ]
+        ])
+        try require(
+            try AgentEventParser.parse(envelope: copilot).clipItem?.text == "Copilot finished from transcript.",
+            "Copilot transcript parsing failed"
+        )
+    }
 }
 
 func checkHistoryParsers() throws {
@@ -155,19 +226,42 @@ func checkHookInstaller() throws {
         ]
         try JSONSerialization.data(withJSONObject: existing).write(to: claudeConfig)
 
+        let cursorConfig = root.appendingPathComponent(".cursor/hooks.json")
+        try FileManager.default.createDirectory(at: cursorConfig.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: [
+            "version": 1,
+            "hooks": ["afterFileEdit": [["command": "/usr/bin/existing-cursor-hook"]]]
+        ]).write(to: cursorConfig)
+
         let installer = HookInstaller(home: root, helperURL: helper)
         try installer.install()
-        try require(installer.status().claudeInstalled, "Claude hook installation failed")
-        try require(installer.status().codexInstalled, "Codex hook installation failed")
+        let status = installer.status()
+        try require(status.providers.count == ItemSource.agentSources.count, "Not all providers were reported")
+        let incomplete = status.providers.filter { !$0.installed }.map {
+            "\($0.provider.rawValue): \($0.missingEvents.joined(separator: ","))"
+        }.joined(separator: "; ")
+        try require(status.providers.allSatisfy(\.installed), "One or more agent integrations failed to install: \(incomplete)")
         let installed = try String(contentsOf: claudeConfig, encoding: .utf8)
         try require(installed.contains("existing-hook"), "Existing hook was overwritten")
         try require(installed.contains("--managed-by duckclip"), "Managed hook marker is missing")
         try require(installed.contains("Library/Application Support/DuckClip/bin/duckclip-hook"), "Stable helper path was not installed")
+        let installedCursor = try String(contentsOf: cursorConfig, encoding: .utf8)
+        try require(installedCursor.contains("existing-cursor-hook"), "Existing Cursor hook was overwritten")
+        try require(FileManager.default.fileExists(atPath: root.appendingPathComponent(".copilot/hooks/duckclip.json").path), "Copilot hook file is missing")
+        let gajaeExtension = root.appendingPathComponent(".gjc/agent/extensions/duckclip/index.ts")
+        let openCodePlugin = root.appendingPathComponent(".config/opencode/plugins/duckclip.js")
+        try require(FileManager.default.fileExists(atPath: gajaeExtension.path), "Gajae extension is missing")
+        try require(FileManager.default.fileExists(atPath: openCodePlugin.path), "OpenCode plugin is missing")
+        try validateBunModule(at: gajaeExtension, output: root.appendingPathComponent("gajae-extension.js"))
+        try validateBunModule(at: openCodePlugin, output: root.appendingPathComponent("opencode-plugin.js"))
         try installer.uninstall()
         let removed = try String(contentsOf: claudeConfig, encoding: .utf8)
         try require(removed.contains("existing-hook"), "Existing hook was removed")
         try require(removed.contains("duckclip-hook-backup"), "Unrelated hook with a similar name was removed")
         try require(!removed.contains("--managed-by duckclip"), "Managed DuckClip hook was not removed")
+        let removedCursor = try String(contentsOf: cursorConfig, encoding: .utf8)
+        try require(removedCursor.contains("existing-cursor-hook"), "Existing Cursor hook was removed")
+        try require(!FileManager.default.fileExists(atPath: root.appendingPathComponent(".copilot/hooks/duckclip.json").path), "Copilot hook file was not removed")
     }
 }
 
@@ -176,7 +270,7 @@ do {
     try checkAgentEvents()
     try checkHistoryParsers()
     try checkHookInstaller()
-    print("DuckClip checks passed: store, search, hooks, events, and history import")
+    print("DuckClip checks passed: store, search, seven agent integrations, events, and history import")
 } catch {
     FileHandle.standardError.write(Data("DuckClip check failed: \(error.localizedDescription)\n".utf8))
     exit(EXIT_FAILURE)

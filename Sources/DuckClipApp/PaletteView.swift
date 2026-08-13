@@ -347,8 +347,7 @@ struct PaletteView: View {
 
     private var missingAgentIntegrations: Bool {
         model.sourceFilter == .agents
-            && !model.hookStatus.claudeInstalled
-            && !model.hookStatus.codexInstalled
+            && model.hookStatus.providers.allSatisfy { !$0.installed }
     }
 
     private var hasActiveFilters: Bool {
@@ -578,9 +577,9 @@ private struct AgentRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: session.provider == .codex ? "chevron.left.forwardslash.chevron.right" : "sparkles")
+            Image(systemName: providerIcon)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(session.provider == .codex ? .green : .orange)
+                .foregroundStyle(providerColor)
                 .frame(width: 28, height: 28)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
                 .accessibilityHidden(true)
@@ -615,6 +614,32 @@ private struct AgentRow: View {
     private var identityLabel: String {
         let prefix = session.agentID == nil ? String(localized: "Session") : String(localized: "Agent")
         return "\(prefix) \(session.identityID.prefix(10))"
+    }
+
+    private var providerIcon: String {
+        switch session.provider {
+        case .claude: "sparkles"
+        case .codex: "chevron.left.forwardslash.chevron.right"
+        case .gajae: "shippingbox.fill"
+        case .gemini: "diamond.fill"
+        case .copilot: "infinity"
+        case .cursor: "cursorarrow.rays"
+        case .opencode: "terminal.fill"
+        case .clipboard: "doc.on.clipboard"
+        }
+    }
+
+    private var providerColor: Color {
+        switch session.provider {
+        case .claude: .orange
+        case .codex: .green
+        case .gajae: .pink
+        case .gemini: .blue
+        case .copilot: .purple
+        case .cursor: .cyan
+        case .opencode: .mint
+        case .clipboard: .secondary
+        }
     }
 }
 
@@ -716,6 +741,11 @@ private struct ItemRow: View {
         switch item.source {
         case .claude: "sparkles"
         case .codex: "chevron.left.forwardslash.chevron.right"
+        case .gajae: "shippingbox.fill"
+        case .gemini: "diamond.fill"
+        case .copilot: "infinity"
+        case .cursor: "cursorarrow.rays"
+        case .opencode: "terminal.fill"
         case .clipboard:
             switch item.kind {
             case .url: "link"
@@ -757,6 +787,11 @@ private struct ItemThumbnail: View {
         switch item.source {
         case .claude: .orange
         case .codex: .green
+        case .gajae: .pink
+        case .gemini: .blue
+        case .copilot: .purple
+        case .cursor: .cyan
+        case .opencode: .mint
         case .clipboard: .blue
         }
     }

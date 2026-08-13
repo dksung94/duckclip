@@ -243,7 +243,7 @@ final class AppModel: ObservableObject {
                     let counts = LibraryCounts(
                         all: try store.count(),
                         clipboard: try store.count(sources: [.clipboard]),
-                        agents: try store.count(sources: [.claude, .codex])
+                        agents: try store.count(sources: ItemSource.agentSources)
                     )
                     return (sessions, items, conversationFilter != nil && conversation == nil, truncated, counts)
                 }.value
@@ -679,11 +679,14 @@ final class AppModel: ObservableObject {
         }
         guard !settings.isProjectExcluded(event.projectPath) else { return }
         var itemID: String?
+        var isNewResponse = true
         if let item = event.clipItem {
             do {
                 if try store.insert(item) {
                     itemID = item.id
                     reload()
+                } else {
+                    isNewResponse = false
                 }
             } catch {
                 errorMessage = error.localizedDescription
@@ -693,7 +696,7 @@ final class AppModel: ObservableObject {
         let enabled: Bool
         switch event.kind {
         case .responseCompleted:
-            enabled = settings.notificationsEnabled && settings.completionNotifications
+            enabled = settings.notificationsEnabled && settings.completionNotifications && isNewResponse
         case .inputRequired:
             enabled = settings.notificationsEnabled && settings.inputNotifications
         case .approvalRequired:

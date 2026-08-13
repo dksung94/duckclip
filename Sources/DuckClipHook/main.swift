@@ -7,7 +7,7 @@ enum HookError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidArguments:
-            "Usage: duckclip-hook capture --managed-by duckclip --schema 1 --provider <claude|codex> --event <event>"
+            "Usage: duckclip-hook capture --managed-by duckclip --schema 1 --provider <agent> --event <event>"
         case .invalidJSON: "Hook input was not valid JSON."
         }
     }
@@ -32,7 +32,8 @@ do {
         provider = arguments[0]
         event = arguments[1]
     }
-    guard ["claude", "codex"].contains(provider) else { throw HookError.invalidArguments }
+    let supportedProviders = ["claude", "codex", "gajae", "gemini", "copilot", "cursor", "opencode"]
+    guard supportedProviders.contains(provider) else { throw HookError.invalidArguments }
 
     let input = FileHandle.standardInput.readDataToEndOfFile()
     guard let payload = try JSONSerialization.jsonObject(with: input) as? [String: Any] else {
@@ -61,9 +62,9 @@ do {
     let target = inbox.appendingPathComponent("\(Date().timeIntervalSince1970)-\(UUID().uuidString).json")
     try data.write(to: target, options: .atomic)
 
-    if provider == "codex" {
-        FileHandle.standardOutput.write(Data("{}\n".utf8))
-    }
+    // Every supported hook protocol accepts an empty JSON response as an
+    // observational, non-blocking result.
+    FileHandle.standardOutput.write(Data("{}\n".utf8))
     exit(EXIT_SUCCESS)
 } catch {
     FileHandle.standardError.write(Data("duckclip-hook: \(error.localizedDescription)\n".utf8))

@@ -13,6 +13,14 @@ let package = Package(
         .executable(name: "duckclip-hook", targets: ["DuckClipHook"]),
         .executable(name: "duckclipctl", targets: ["DuckClipCtl"])
     ],
+    dependencies: [
+        // Command Line Tools installations can omit bundled test modules. Pin
+        // the matching Swift Testing release so the test suite stays portable.
+        .package(
+            url: "https://github.com/swiftlang/swift-testing.git",
+            revision: "cd448bbe5cc989d8693ca75e9b08593eb143dea1"
+        )
+    ],
     targets: [
         .systemLibrary(
             name: "CSQLite",
@@ -42,7 +50,10 @@ let package = Package(
         ),
         .testTarget(
             name: "DuckClipCoreTests",
-            dependencies: ["DuckClipCore"]
+            dependencies: [
+                "DuckClipCore",
+                .product(name: "Testing", package: "swift-testing")
+            ]
         )
     ],
     swiftLanguageModes: [.v5]

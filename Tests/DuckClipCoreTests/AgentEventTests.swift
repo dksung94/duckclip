@@ -1,9 +1,9 @@
 import Foundation
-import XCTest
+import Testing
 @testable import DuckClipCore
 
-final class AgentEventTests: XCTestCase {
-    func testParsesCodexStopEnvelope() throws {
+@Suite struct AgentEventTests {
+    @Test func parsesCodexStopEnvelope() throws {
         let data = try JSONSerialization.data(withJSONObject: [
             "provider": "codex",
             "event": "stop",
@@ -19,18 +19,18 @@ final class AgentEventTests: XCTestCase {
             ]
         ])
         let event = try AgentEventParser.parse(envelope: data)
-        XCTAssertEqual(event.provider, .codex)
-        XCTAssertEqual(event.kind, .responseCompleted)
-        XCTAssertEqual(event.clipItem?.text, "Implemented and tested.")
-        XCTAssertEqual(event.clipItem?.agentTurnID, "turn-7")
-        XCTAssertEqual(event.clipItem?.agentID, "agent-codex")
-        XCTAssertEqual(event.clipItem?.eventID, event.eventID)
+        #expect(event.provider == .codex)
+        #expect(event.kind == .responseCompleted)
+        #expect(event.clipItem?.text == "Implemented and tested.")
+        #expect(event.clipItem?.agentTurnID == "turn-7")
+        #expect(event.clipItem?.agentID == "agent-codex")
+        #expect(event.clipItem?.eventID == event.eventID)
 
         let sameEvent = try AgentEventParser.parse(envelope: data)
-        XCTAssertEqual(sameEvent.eventID, event.eventID)
+        #expect(sameEvent.eventID == event.eventID)
     }
 
-    func testParsesClaudePermissionRequest() throws {
+    @Test func parsesClaudePermissionRequest() throws {
         let data = try JSONSerialization.data(withJSONObject: [
             "provider": "claude",
             "event": "permission-request",
@@ -43,11 +43,11 @@ final class AgentEventTests: XCTestCase {
             ]
         ])
         let event = try AgentEventParser.parse(envelope: data)
-        XCTAssertEqual(event.kind, .approvalRequired)
-        XCTAssertTrue(event.message.contains("swift test"))
+        #expect(event.kind == .approvalRequired)
+        #expect(event.message.contains("swift test"))
     }
 
-    func testParsesCodexInputRequest() throws {
+    @Test func parsesCodexInputRequest() throws {
         let data = try JSONSerialization.data(withJSONObject: [
             "provider": "codex",
             "event": "input-request",
@@ -57,6 +57,59 @@ final class AgentEventTests: XCTestCase {
                 "session_id": "session-codex"
             ]
         ])
-        XCTAssertEqual(try AgentEventParser.parse(envelope: data).kind, .inputRequired)
+        #expect(try AgentEventParser.parse(envelope: data).kind == .inputRequired)
+    }
+
+    @Test func parsesGeminiAndCursorResponses() throws {
+        let gemini = try JSONSerialization.data(withJSONObject: [
+            "provider": "gemini",
+            "event": "after-agent",
+            "payload": [
+                "hook_event_name": "AfterAgent",
+                "session_id": "gemini-session",
+                "prompt_response": "Gemini completed."
+            ]
+        ])
+        #expect(try AgentEventParser.parse(envelope: gemini).clipItem?.text == "Gemini completed.")
+
+        let cursor = try JSONSerialization.data(withJSONObject: [
+            "provider": "cursor",
+            "event": "after-agent-response",
+            "payload": [
+                "hook_event_name": "afterAgentResponse",
+                "conversation_id": "cursor-conversation",
+                "generation_id": "cursor-generation",
+                "workspace_roots": ["/tmp/cursor"],
+                "text": "Cursor completed."
+            ]
+        ])
+        let event = try AgentEventParser.parse(envelope: cursor)
+        #expect(event.clipItem?.text == "Cursor completed.")
+        #expect(event.clipItem?.agentTurnID == "cursor-generation")
+        #expect(event.projectPath == "/tmp/cursor")
+    }
+
+    @Test func parsesCopilotResponseFromTranscript() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DuckClipAgentEventTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let transcript = root.appendingPathComponent("copilot.jsonl")
+        let lines = [
+            #"{"role":"user","content":"fix it"}"#,
+            #"{"role":"assistant","content":[{"type":"text","text":"Copilot completed."}]}"#
+        ].joined(separator: "\n")
+        try Data(lines.utf8).write(to: transcript)
+
+        let data = try JSONSerialization.data(withJSONObject: [
+            "provider": "copilot",
+            "event": "agent-stop",
+            "payload": [
+                "hook_event_name": "agentStop",
+                "sessionId": "copilot-session",
+                "transcriptPath": transcript.path
+            ]
+        ])
+        #expect(try AgentEventParser.parse(envelope: data).clipItem?.text == "Copilot completed.")
     }
 }

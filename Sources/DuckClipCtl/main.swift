@@ -8,7 +8,7 @@ enum ControlError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .usage:
-            "Usage: duckclipctl <install|uninstall|status|test claude|test codex> [--helper /path/to/duckclip-hook]"
+            "Usage: duckclipctl <install|uninstall|status|test PROVIDER> [--helper /path/to/duckclip-hook]"
         case .missingHelper(let url):
             "duckclip-hook is not executable at \(url.path)"
         }
@@ -16,7 +16,7 @@ enum ControlError: LocalizedError {
 }
 
 func printStatus(_ status: HookInstallationStatus) {
-    for provider in [status.claude, status.codex] {
+    for provider in status.providers {
         let state = provider.installed ? "ready" : "needs setup"
         print("\(provider.provider.displayName): \(state)")
         if !provider.helperExecutable { print("  helper: missing or not executable") }

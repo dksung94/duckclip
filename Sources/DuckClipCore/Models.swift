@@ -4,12 +4,28 @@ public enum ItemSource: String, Codable, CaseIterable, Sendable {
     case clipboard
     case claude
     case codex
+    case gajae
+    case gemini
+    case copilot
+    case cursor
+    case opencode
+
+    public static let agentSources: [ItemSource] = [
+        .claude, .codex, .gajae, .gemini, .copilot, .cursor, .opencode
+    ]
+
+    public var isAgent: Bool { self != .clipboard }
 
     public var displayName: String {
         switch self {
         case .clipboard: String(localized: "Clipboard")
         case .claude: "Claude"
         case .codex: "Codex"
+        case .gajae: "Gajae Code"
+        case .gemini: "Gemini CLI"
+        case .copilot: "GitHub Copilot CLI"
+        case .cursor: "Cursor"
+        case .opencode: "OpenCode"
         }
     }
 }
@@ -120,7 +136,7 @@ public enum SourceFilter: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .all: nil
         case .clipboard: [.clipboard]
-        case .agents: [.claude, .codex]
+        case .agents: ItemSource.agentSources
         }
     }
 }

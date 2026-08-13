@@ -1,13 +1,13 @@
 import Foundation
-import XCTest
+import Testing
 @testable import DuckClipCore
 
-final class HookInstallerTests: XCTestCase {
-    func testInstallerPreservesExistingHooksAndRemovesOnlyDuckClip() throws {
+@Suite struct HookInstallerTests {
+    @Test func installerPreservesExistingHooksAndRemovesOnlyDuckClip() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("DuckClipHookTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: root) }
 
         let helper = root.appendingPathComponent("duckclip-hook")
         try Data().write(to: helper)
@@ -28,18 +28,21 @@ final class HookInstallerTests: XCTestCase {
 
         let installer = HookInstaller(home: root, helperURL: helper)
         try installer.install()
-        XCTAssertTrue(installer.status().claudeInstalled)
-        XCTAssertTrue(installer.status().codexInstalled)
+        #expect(installer.status().providers.count == ItemSource.agentSources.count)
+        #expect(installer.status().providers.allSatisfy { $0.installed })
 
         let installedText = try String(contentsOf: claudeConfig, encoding: .utf8)
-        XCTAssertTrue(installedText.contains("existing-hook"))
-        XCTAssertTrue(installedText.contains("--managed-by duckclip"))
-        XCTAssertTrue(installedText.contains("Library/Application Support/DuckClip/bin/duckclip-hook"))
+        #expect(installedText.contains("existing-hook"))
+        #expect(installedText.contains("--managed-by duckclip"))
+        #expect(installedText.contains("Library/Application Support/DuckClip/bin/duckclip-hook"))
 
         try installer.uninstall()
         let removedText = try String(contentsOf: claudeConfig, encoding: .utf8)
-        XCTAssertTrue(removedText.contains("existing-hook"))
-        XCTAssertTrue(removedText.contains("duckclip-hook-backup"))
-        XCTAssertFalse(removedText.contains("--managed-by duckclip"))
+        #expect(removedText.contains("existing-hook"))
+        #expect(removedText.contains("duckclip-hook-backup"))
+        #expect(!removedText.contains("--managed-by duckclip"))
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent(".copilot/hooks/duckclip.json").path))
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent(".gjc/agent/extensions/duckclip/index.ts").path))
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent(".config/opencode/plugins/duckclip.js").path))
     }
 }

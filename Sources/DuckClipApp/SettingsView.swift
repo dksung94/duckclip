@@ -48,10 +48,10 @@ struct SettingsView: View {
             isPresented: $confirmRemoveIntegrations,
             titleVisibility: .visible
         ) {
-            Button("Remove Claude and Codex integrations", role: .destructive) { model.uninstallHooks() }
+            Button("Remove all agent integrations", role: .destructive) { model.uninstallHooks() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("DuckClip hooks will be removed from both Claude and Codex. Existing clipboard history is kept.")
+            Text("Only files and hook entries managed by DuckClip will be removed. Existing history and unrelated agent settings are kept.")
         }
         .alert("DuckClip", isPresented: Binding(
             get: { model.errorMessage != nil },
@@ -197,14 +197,15 @@ struct SettingsView: View {
             }
 
             Section("Connections") {
-                integrationRow(model.hookStatus.claude)
-                integrationRow(model.hookStatus.codex)
+                ForEach(model.hookStatus.providers) { status in
+                    integrationRow(status)
+                }
 
                 HStack {
                     Button("Install or Update Integrations") { model.installHooks() }
                     Button("Remove integrations", role: .destructive) { confirmRemoveIntegrations = true }
                 }
-                Text("Codex may ask you to trust a newly installed hook. Run /hooks in Codex if capture does not start immediately.")
+                Text("Restart an agent after installing. Codex may ask you to trust its hook; run /hooks there if capture does not start.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !model.integrationTestStatus.isEmpty {

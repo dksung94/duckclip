@@ -241,8 +241,10 @@ public final class SQLiteStore: @unchecked Sendable {
 
     public func sessions(source: ItemSource? = nil) throws -> [AgentSessionSummary] {
         try withLock {
-            var whereClause = "deleted_at IS NULL AND source IN ('claude', 'codex') AND (session_id IS NOT NULL OR agent_id IS NOT NULL)"
-            if source == .claude || source == .codex {
+            let providers = ItemSource.agentSources
+            let placeholders = Array(repeating: "?", count: providers.count).joined(separator: ", ")
+            var whereClause = "deleted_at IS NULL AND source IN (\(placeholders)) AND (session_id IS NOT NULL OR agent_id IS NOT NULL)"
+            if source?.isAgent == true {
                 whereClause += " AND source = ?"
             }
             let statement = try prepare("""
@@ -257,8 +259,11 @@ public final class SQLiteStore: @unchecked Sendable {
                 ORDER BY MAX(created_at) DESC;
             """)
             defer { sqlite3_finalize(statement) }
-            if source == .claude || source == .codex {
-                bind(source?.rawValue, at: 1, in: statement)
+            for (offset, provider) in providers.enumerated() {
+                bind(provider.rawValue, at: Int32(offset + 1), in: statement)
+            }
+            if source?.isAgent == true {
+                bind(source?.rawValue, at: Int32(providers.count + 1), in: statement)
             }
             var result: [AgentSessionSummary] = []
             while sqlite3_step(statement) == SQLITE_ROW {

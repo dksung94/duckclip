@@ -18,6 +18,12 @@ mkdir -p "$macos_dir" "$resources_dir/ko.lproj"
 cp "$binary_dir/DuckClip" "$macos_dir/DuckClip"
 cp "$binary_dir/duckclip-hook" "$macos_dir/duckclip-hook"
 cp "$repo_dir/Support/Info.plist" "$contents_dir/Info.plist"
+if [[ -n "${APP_VERSION:-}" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$contents_dir/Info.plist"
+fi
+if [[ -n "${BUILD_NUMBER:-}" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$contents_dir/Info.plist"
+fi
 cp "$repo_dir/Support/ko.lproj/Localizable.strings" "$resources_dir/ko.lproj/Localizable.strings"
 cp "$repo_dir/Support/Assets/DuckClipMenuBar.png" "$resources_dir/DuckClipMenuBar.png"
 cp "$repo_dir/Support/Assets/DuckClipMenuBar@2x.png" "$resources_dir/DuckClipMenuBar@2x.png"

@@ -1,18 +1,18 @@
 import Foundation
-import XCTest
+import Testing
 @testable import DuckClipCore
 
-final class SQLiteStoreTests: XCTestCase {
+@Suite struct SQLiteStoreTests {
     private func temporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("DuckClipTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
         return directory
     }
 
-    func testInsertSearchPinAndDelete() throws {
+    @Test func insertSearchPinAndDelete() throws {
         let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
         let store = try SQLiteStore(url: directory.appendingPathComponent("test.sqlite3"))
         let first = ClipItem(
             kind: .text,
@@ -32,27 +32,28 @@ final class SQLiteStoreTests: XCTestCase {
             projectPath: "/tmp/platform-api"
         )
 
-        XCTAssertTrue(try store.insert(first))
-        XCTAssertTrue(try store.insert(second))
-        XCTAssertEqual(try store.search(query: "BalanceLocker").map(\.id), [second.id])
-        XCTAssertEqual(try store.search(source: .clipboard).map(\.id), [first.id])
-        XCTAssertEqual(try store.search(sources: [.claude, .codex]).map(\.id), [second.id])
-        XCTAssertEqual(try store.search(agentID: "agent-1").map(\.id), [second.id])
-        XCTAssertEqual(try store.sessions().first?.agentID, "agent-1")
+        #expect(try store.insert(first))
+        #expect(try store.insert(second))
+        #expect(try store.search(query: "BalanceLocker").map(\.id) == [second.id])
+        #expect(try store.search(source: .clipboard).map(\.id) == [first.id])
+        #expect(try store.search(sources: ItemSource.agentSources).map(\.id) == [second.id])
+        #expect(try store.search(agentID: "agent-1").map(\.id) == [second.id])
+        #expect(try store.sessions().first?.agentID == "agent-1")
 
         try store.setPinned(id: first.id, pinned: true)
-        XCTAssertEqual(try store.search().first?.id, first.id)
+        #expect(try store.search().first?.id == first.id)
         try store.softDelete(id: first.id)
-        XCTAssertEqual(try store.search().map(\.id), [second.id])
+        #expect(try store.search().map(\.id) == [second.id])
         try store.restore(id: first.id)
-        XCTAssertEqual(try store.search().first?.id, first.id)
+        #expect(try store.search().first?.id == first.id)
         try store.softDelete(id: first.id)
         _ = try store.deleteSoftDeleted()
-        XCTAssertNil(try store.item(id: first.id))
+        #expect(try store.item(id: first.id) == nil)
     }
 
-    func testAgentTurnIsIdempotent() throws {
+    @Test func agentTurnIsIdempotent() throws {
         let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
         let store = try SQLiteStore(url: directory.appendingPathComponent("test.sqlite3"))
         let item = ClipItem(
             kind: .agentResponse,
@@ -62,8 +63,8 @@ final class SQLiteStoreTests: XCTestCase {
             sessionID: "s",
             agentTurnID: "t"
         )
-        XCTAssertTrue(try store.insert(item))
-        XCTAssertFalse(try store.insert(item))
-        XCTAssertEqual(try store.count(), 1)
+        #expect(try store.insert(item))
+        #expect(try !store.insert(item))
+        #expect(try store.count() == 1)
     }
 }
