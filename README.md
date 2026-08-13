@@ -50,7 +50,7 @@ Use the compact Quick Paste window when you want something recent. Open the full
 ## Quick Paste
 
 <p align="center">
-  <img src="docs/assets/duckclip-quick-paste.png" width="560" alt="DuckClip Quick Paste showing recent clipboard items with Command-number shortcuts">
+  <img src="docs/assets/duckclip-quick-paste.png" width="560" alt="DuckClip Quick Paste showing nine recent text, URL, file, and image items with Command-number shortcuts">
 </p>
 
 Press `⌃⌘V` to open a lightweight list of your nine most recent clipboard items.
@@ -67,7 +67,7 @@ Clicking another app also dismisses Quick Paste without closing DuckClip itself.
 ## The full library
 
 <p align="center">
-  <img src="docs/assets/duckclip-demo.png" width="1080" alt="DuckClip agent library showing agents, conversations, and response details in three columns">
+  <img src="docs/assets/duckclip-demo.png" width="1080" alt="DuckClip agent inbox showing seven coding agents, question-based conversations, an original question and answer, and a live follow-up composer">
 </p>
 
 Press `⇧⌘V` when you need the complete DuckClip library.
