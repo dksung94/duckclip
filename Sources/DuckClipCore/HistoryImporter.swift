@@ -85,54 +85,75 @@ public final class HistoryImporter: @unchecked Sendable {
         var activeUserPrompt: String?
         var results: [ClipItem] = []
 
-        for object in jsonLines(data) {
-            let type = object["type"] as? String
-            let payload = object["payload"] as? [String: Any] ?? [:]
-            if type == "session_meta" {
-                sessionID = payload["id"] as? String ?? payload["session_id"] as? String
-                cwd = payload["cwd"] as? String
-                continue
-            }
-            if type == "turn_context" {
-                activeTurnID = payload["turn_id"] as? String ?? activeTurnID
-                cwd = payload["cwd"] as? String ?? cwd
-                continue
-            }
-            if type == "event_msg", payload["type"] as? String == "task_started" {
-                activeTurnID = payload["turn_id"] as? String ?? activeTurnID
-                continue
-            }
-            if type == "event_msg", payload["type"] as? String == "user_message" {
-                activeUserPrompt = sanitizedUserPrompt(payload["message"] as? String)
-                continue
-            }
-            guard
-                type == "response_item",
-                payload["type"] as? String == "message",
-                payload["role"] as? String == "assistant"
-            else { continue }
+        for line in data.split(separator: 0x0A) {
+            autoreleasepool {
+                guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else {
+                    return
+                }
+                let type = object["type"] as? String
+                let payload = object["payload"] as? [String: Any] ?? [:]
+                if type == "session_meta" {
+                    sessionID = payload["id"] as? String ?? payload["session_id"] as? String
+                    cwd = payload["cwd"] as? String
+                    return
+                }
+                if type == "turn_context" {
+                    activeTurnID = payload["turn_id"] as? String ?? activeTurnID
+                    cwd = payload["cwd"] as? String ?? cwd
+                    return
+                }
+                if type == "event_msg", payload["type"] as? String == "task_started" {
+                    activeTurnID = payload["turn_id"] as? String ?? activeTurnID
+                    activeUserPrompt = nil
+                    return
+                }
+                if type == "event_msg", payload["type"] as? String == "user_message" {
+                    activeUserPrompt = sanitizedUserPrompt(payload["message"] as? String)
+                    return
+                }
+                if type == "response_item",
+                   payload["type"] as? String == "message",
+                   payload["role"] as? String == "user" {
+                    activeTurnID = codexTurnID(payload) ?? activeTurnID
+                    activeUserPrompt = sanitizedUserPrompt(textContent(payload["content"]))
+                    return
+                }
+                if type == "event_msg", payload["type"] as? String == "item_completed",
+                   let item = payload["item"] as? [String: Any],
+                   item["type"] as? String == "UserMessage" {
+                    activeTurnID = payload["turn_id"] as? String ?? activeTurnID
+                    activeUserPrompt = sanitizedUserPrompt(textContent(item["content"]))
+                    return
+                }
+                guard
+                    type == "response_item",
+                    payload["type"] as? String == "message",
+                    payload["role"] as? String == "assistant"
+                else { return }
 
-            let phase = payload["phase"] as? String
-            if let phase, phase != "final_answer" { continue }
-            let content = payload["content"] as? [[String: Any]] ?? []
-            let text = content.compactMap { block -> String? in
-                guard ["output_text", "text"].contains(block["type"] as? String ?? "") else { return nil }
-                return block["text"] as? String
-            }.joined(separator: "\n")
-            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-            let messageID = payload["id"] as? String
-            let timestamp = parseDate(object["timestamp"] as? String) ?? Date()
-            results.append(ClipItem(
-                kind: .agentResponse,
-                source: .codex,
-                text: text,
-                userPrompt: activeUserPrompt,
-                contentHash: ContentHasher.sha256(text),
-                sessionID: sessionID,
-                agentTurnID: messageID ?? activeTurnID,
-                projectPath: cwd,
-                createdAt: timestamp
-            ))
+                let phase = payload["phase"] as? String
+                if let phase, phase != "final_answer" { return }
+                let content = payload["content"] as? [[String: Any]] ?? []
+                let text = content.compactMap { block -> String? in
+                    guard ["output_text", "text"].contains(block["type"] as? String ?? "") else { return nil }
+                    return block["text"] as? String
+                }.joined(separator: "\n")
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                let messageID = payload["id"] as? String
+                let messageTurnID = codexTurnID(payload) ?? activeTurnID
+                let timestamp = parseDate(object["timestamp"] as? String) ?? Date()
+                results.append(ClipItem(
+                    kind: .agentResponse,
+                    source: .codex,
+                    text: text,
+                    userPrompt: activeUserPrompt,
+                    contentHash: ContentHasher.sha256(text),
+                    sessionID: sessionID,
+                    agentTurnID: messageTurnID ?? messageID,
+                    projectPath: cwd,
+                    createdAt: timestamp
+                ))
+            }
         }
         return deduplicated(results)
     }
@@ -142,55 +163,54 @@ public final class HistoryImporter: @unchecked Sendable {
         var anonymous: [ClipItem] = []
         var activeUserPrompt: String?
 
-        for object in jsonLines(data) {
-            if object["type"] as? String == "user" {
-                guard object["isSidechain"] as? Bool != true,
-                      object["isMeta"] as? Bool != true
-                else { continue }
+        for line in data.split(separator: 0x0A) {
+            autoreleasepool {
+                guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else {
+                    return
+                }
+                if object["type"] as? String == "user" {
+                    guard object["isSidechain"] as? Bool != true,
+                          object["isMeta"] as? Bool != true
+                    else { return }
+                    let message = object["message"] as? [String: Any] ?? [:]
+                    guard message["role"] as? String == "user" else { return }
+                    activeUserPrompt = sanitizedUserPrompt(textContent(message["content"]))
+                    return
+                }
+                guard object["type"] as? String == "assistant" else { return }
+                if object["isSidechain"] as? Bool == true { return }
                 let message = object["message"] as? [String: Any] ?? [:]
-                guard message["role"] as? String == "user" else { continue }
-                activeUserPrompt = sanitizedUserPrompt(textContent(message["content"]))
-                continue
-            }
-            guard object["type"] as? String == "assistant" else { continue }
-            if object["isSidechain"] as? Bool == true { continue }
-            let message = object["message"] as? [String: Any] ?? [:]
-            guard message["role"] as? String == "assistant" else { continue }
-            let content = message["content"] as? [[String: Any]] ?? []
-            let text = content.compactMap { block -> String? in
-                guard block["type"] as? String == "text" else { return nil }
-                return block["text"] as? String
-            }.joined(separator: "\n")
-            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                guard message["role"] as? String == "assistant" else { return }
+                let content = message["content"] as? [[String: Any]] ?? []
+                let text = content.compactMap { block -> String? in
+                    guard block["type"] as? String == "text" else { return nil }
+                    return block["text"] as? String
+                }.joined(separator: "\n")
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
-            let messageID = message["id"] as? String ?? object["uuid"] as? String
-            let sessionID = object["sessionId"] as? String
-            let cwd = object["cwd"] as? String
-            let timestamp = parseDate(object["timestamp"] as? String) ?? Date()
-            let item = ClipItem(
-                kind: .agentResponse,
-                source: .claude,
-                text: text,
-                userPrompt: activeUserPrompt,
-                contentHash: ContentHasher.sha256(text),
-                sessionID: sessionID,
-                agentTurnID: messageID,
-                projectPath: cwd,
-                createdAt: timestamp
-            )
-            if let messageID {
-                byMessageID[messageID] = item
-            } else {
-                anonymous.append(item)
+                let messageID = message["id"] as? String ?? object["uuid"] as? String
+                let sessionID = object["sessionId"] as? String
+                let cwd = object["cwd"] as? String
+                let timestamp = parseDate(object["timestamp"] as? String) ?? Date()
+                let item = ClipItem(
+                    kind: .agentResponse,
+                    source: .claude,
+                    text: text,
+                    userPrompt: activeUserPrompt,
+                    contentHash: ContentHasher.sha256(text),
+                    sessionID: sessionID,
+                    agentTurnID: messageID,
+                    projectPath: cwd,
+                    createdAt: timestamp
+                )
+                if let messageID {
+                    byMessageID[messageID] = item
+                } else {
+                    anonymous.append(item)
+                }
             }
         }
         return deduplicated(Array(byMessageID.values) + anonymous)
-    }
-
-    private static func jsonLines(_ data: Data) -> [[String: Any]] {
-        data.split(separator: 0x0A).compactMap { line in
-            try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any]
-        }
     }
 
     private static func parseDate(_ value: String?) -> Date? {
@@ -208,6 +228,12 @@ public final class HistoryImporter: @unchecked Sendable {
             return block["text"] as? String
         }.joined(separator: "\n\n")
         return text.isEmpty ? nil : text
+    }
+
+    private static func codexTurnID(_ payload: [String: Any]) -> String? {
+        if let turnID = payload["turn_id"] as? String { return turnID }
+        let metadata = payload["internal_chat_message_metadata_passthrough"] as? [String: Any]
+        return metadata?["turn_id"] as? String
     }
 
     private static func sanitizedUserPrompt(_ value: String?) -> String? {

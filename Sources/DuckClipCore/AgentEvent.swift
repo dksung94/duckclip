@@ -106,7 +106,7 @@ public enum AgentEventParser {
             "user_prompt", "userPrompt", "prompt", "question", "request"
         )
         let userPrompt = sanitizedUserPrompt(directUserPrompt)
-            ?? transcriptPath.flatMap { lastUserPrompt(at: $0, provider: provider) }
+            ?? transcriptPath.flatMap { lastUserPrompt(at: $0, provider: provider, turnID: turnID) }
         let notificationType = string(payload, "notification_type", "notificationType")
         let toolName = string(payload, "tool_name", "toolName")
         let normalizedEvent = normalized(eventName)
@@ -268,17 +268,17 @@ public enum AgentEventParser {
         return nil
     }
 
-    private static func lastUserPrompt(at path: String, provider: ItemSource) -> String? {
+    private static func lastUserPrompt(at path: String, provider: ItemSource, turnID: String?) -> String? {
         let url = URL(fileURLWithPath: path)
         guard
             let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
             let size = attributes[.size] as? NSNumber,
-            size.int64Value <= 50 * 1_024 * 1_024,
-            let data = try? Data(contentsOf: url)
+            let data = recentTranscriptData(at: url, size: size.int64Value)
         else { return nil }
 
-        if let object = try? JSONSerialization.jsonObject(with: data) {
-            return userPrompts(in: object, provider: provider).last
+        if size.int64Value == Int64(data.count),
+           let object = try? JSONSerialization.jsonObject(with: data) {
+            return userPrompts(in: object, provider: provider, matching: turnID).last
         }
 
         let lines = String(decoding: data, as: UTF8.self).split(separator: "\n", omittingEmptySubsequences: true)
@@ -286,25 +286,63 @@ public enum AgentEventParser {
             guard
                 let lineData = String(line).data(using: .utf8),
                 let object = try? JSONSerialization.jsonObject(with: lineData),
-                let prompt = userPrompts(in: object, provider: provider).last
+                let prompt = userPrompts(in: object, provider: provider, matching: turnID).last
             else { continue }
             return prompt
         }
         return nil
     }
 
-    private static func userPrompts(in value: Any, provider: ItemSource) -> [String] {
+    private static func recentTranscriptData(at url: URL, size: Int64) -> Data? {
+        let maximumBytes = Int64(16 * 1_024 * 1_024)
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let offset = UInt64(max(0, size - maximumBytes))
+        do {
+            try handle.seek(toOffset: offset)
+            var data = try handle.readToEnd() ?? Data()
+            if offset > 0, let newline = data.firstIndex(of: 0x0A) {
+                data = data.subdata(in: data.index(after: newline)..<data.endIndex)
+            }
+            return data
+        } catch {
+            return nil
+        }
+    }
+
+    private static func userPrompts(
+        in value: Any,
+        provider: ItemSource,
+        matching turnID: String?
+    ) -> [String] {
         if let array = value as? [Any] {
-            return array.flatMap { userPrompts(in: $0, provider: provider) }
+            return array.flatMap { userPrompts(in: $0, provider: provider, matching: turnID) }
         }
         guard let object = value as? [String: Any] else { return [] }
 
-        if provider == .codex,
-           normalized(string(object, "type") ?? "") == "eventmsg",
-           let payload = object["payload"] as? [String: Any],
-           normalized(string(payload, "type") ?? "") == "usermessage",
-           let prompt = sanitizedUserPrompt(string(payload, "message")) {
-            return [prompt]
+        if provider == .codex, let payload = object["payload"] as? [String: Any] {
+            let envelopeType = normalized(string(object, "type") ?? "")
+            let payloadType = normalized(string(payload, "type") ?? "")
+            let payloadTurnID = string(payload, "turn_id", "turnId")
+                ?? (payload["internal_chat_message_metadata_passthrough"] as? [String: Any])
+                    .flatMap { string($0, "turn_id", "turnId") }
+            let turnMatches = turnID == nil || payloadTurnID == nil || payloadTurnID == turnID
+
+            if envelopeType == "eventmsg", payloadType == "usermessage", turnMatches,
+               let prompt = sanitizedUserPrompt(string(payload, "message")) {
+                return [prompt]
+            }
+            if envelopeType == "responseitem", payloadType == "message",
+               normalized(string(payload, "role") ?? "") == "user", turnMatches,
+               let prompt = sanitizedUserPrompt(textContent(in: payload)) {
+                return [prompt]
+            }
+            if envelopeType == "eventmsg", payloadType == "itemcompleted", turnMatches,
+               let item = payload["item"] as? [String: Any],
+               normalized(string(item, "type") ?? "") == "usermessage",
+               let prompt = sanitizedUserPrompt(textContent(in: item)) {
+                return [prompt]
+            }
         }
 
         if provider == .claude,
@@ -323,7 +361,7 @@ public enum AgentEventParser {
            let prompt = sanitizedUserPrompt(textContent(in: object)) {
             return [prompt]
         }
-        return object.values.flatMap { userPrompts(in: $0, provider: provider) }
+        return object.values.flatMap { userPrompts(in: $0, provider: provider, matching: turnID) }
     }
 
     private static func assistantTexts(in value: Any) -> [String] {
@@ -350,7 +388,7 @@ public enum AgentEventParser {
                     if let value = part as? String { return value }
                     guard let block = part as? [String: Any] else { return nil }
                     let type = normalized(string(block, "type", "kind") ?? "text")
-                    guard ["text", "outputtext", "markdown"].contains(type) else { return nil }
+                    guard ["text", "inputtext", "outputtext", "markdown"].contains(type) else { return nil }
                     return string(block, "text", "content", "value")
                 }.joined(separator: "\n\n")
                 if !text.isEmpty { return text }

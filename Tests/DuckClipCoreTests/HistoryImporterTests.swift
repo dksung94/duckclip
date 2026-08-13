@@ -18,6 +18,20 @@ import Testing
         #expect(items.first?.sessionID == "s1")
     }
 
+    @Test func codexHistoryParserLinksCurrentUserMessageFormatByTurn() throws {
+        let lines = [
+            #"{"timestamp":"2026-08-13T05:00:00.000Z","type":"session_meta","payload":{"id":"s1","cwd":"/tmp/repo"}}"#,
+            #"{"timestamp":"2026-08-13T05:00:00.500Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-7"}}"#,
+            #"{"timestamp":"2026-08-13T05:00:00.600Z","type":"response_item","payload":{"type":"message","id":"user-message","role":"user","content":[{"type":"input_text","text":"Why is my question missing?"}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-7"}}}"#,
+            #"{"timestamp":"2026-08-13T05:00:01.000Z","type":"response_item","payload":{"type":"message","id":"assistant-message","role":"assistant","phase":"final_answer","content":[{"type":"output_text","text":"It is fixed."}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-7"}}}"#
+        ].joined(separator: "\n")
+
+        let item = HistoryImporter.parseCodex(data: Data(lines.utf8)).first
+        #expect(item?.userPrompt == "Why is my question missing?")
+        #expect(item?.agentTurnID == "turn-7")
+        #expect(item?.title == "Why is my question missing?")
+    }
+
     @Test func claudeHistoryParserDeduplicatesMessageUpdates() throws {
         let lines = [
             #"{"type":"user","sessionId":"s2","cwd":"/tmp/repo","timestamp":"2026-08-13T04:59:59.000Z","message":{"role":"user","content":"Please keep the window full height."}}"#,

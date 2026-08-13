@@ -30,6 +30,34 @@ import Testing
         #expect(sameEvent.eventID == event.eventID)
     }
 
+    @Test func parsesCodexPromptFromCurrentTranscriptFormat() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DuckClipAgentEventTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let transcript = root.appendingPathComponent("codex.jsonl")
+        let lines = [
+            #"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Show this question."}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-7"}}}"#,
+            #"{"type":"response_item","payload":{"type":"message","role":"assistant","phase":"final_answer","content":[{"type":"output_text","text":"Done."}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-7"}}}"#
+        ].joined(separator: "\n")
+        try Data(lines.utf8).write(to: transcript)
+
+        let data = try JSONSerialization.data(withJSONObject: [
+            "provider": "codex",
+            "event": "stop",
+            "payload": [
+                "hook_event_name": "Stop",
+                "session_id": "session-codex",
+                "turn_id": "turn-7",
+                "transcript_path": transcript.path,
+                "last_assistant_message": "Done."
+            ]
+        ])
+
+        let event = try AgentEventParser.parse(envelope: data)
+        #expect(event.clipItem?.userPrompt == "Show this question.")
+    }
+
     @Test func parsesClaudePermissionRequest() throws {
         let data = try JSONSerialization.data(withJSONObject: [
             "provider": "claude",

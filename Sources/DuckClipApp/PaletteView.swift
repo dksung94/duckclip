@@ -465,12 +465,7 @@ struct PaletteView: View {
             Label("You asked", systemImage: "person.fill")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            ScrollView {
-                Text(prompt)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-            .frame(maxHeight: 140)
+            AdaptiveQuestionText(text: prompt)
         }
         .padding(10)
         .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 9))
@@ -766,6 +761,46 @@ private struct PassiveStatusBanner: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(Color.orange.opacity(0.1))
+    }
+}
+
+private struct AdaptiveQuestionText: View {
+    let text: String
+
+    @State private var contentHeight: CGFloat = 18
+
+    private let maximumHeight: CGFloat = 140
+
+    var body: some View {
+        ScrollView(.vertical) {
+            Text(text)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: QuestionTextHeightKey.self,
+                            value: geometry.size.height
+                        )
+                    }
+                }
+                .padding(.trailing, contentHeight > maximumHeight ? 8 : 0)
+        }
+        .frame(height: min(max(contentHeight, 18), maximumHeight))
+        .scrollIndicators(contentHeight > maximumHeight ? .visible : .hidden)
+        .onPreferenceChange(QuestionTextHeightKey.self) { measuredHeight in
+            guard measuredHeight > 0, abs(contentHeight - measuredHeight) > 0.5 else { return }
+            contentHeight = measuredHeight
+        }
+    }
+}
+
+private struct QuestionTextHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 18
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

@@ -531,7 +531,7 @@ final class AppModel: ObservableObject {
 
     private func backfillAgentQuestionsIfNeeded() {
         let defaults = UserDefaults.standard
-        let key = "didBackfillAgentQuestionsV2"
+        let key = "didBackfillAgentQuestionsV3"
         guard !defaults.bool(forKey: key) else { return }
         let importer = historyImporter
         Task { [weak self] in
