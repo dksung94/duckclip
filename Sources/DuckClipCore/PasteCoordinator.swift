@@ -8,6 +8,7 @@ public final class PasteCoordinator {
         case missingPayload
         case unsupportedImage
         case accessibilityPermissionRequired
+        case targetUnavailable
 
         public var errorDescription: String? {
             switch self {
@@ -17,6 +18,8 @@ public final class PasteCoordinator {
                 String(localized: "paste.error.unsupported_image", defaultValue: "The stored image could not be decoded.")
             case .accessibilityPermissionRequired:
                 String(localized: "paste.error.accessibility", defaultValue: "Enable DuckClip in System Settings → Privacy & Security → Accessibility to paste automatically.")
+            case .targetUnavailable:
+                String(localized: "paste.error.target_unavailable", defaultValue: "The destination app is no longer available. The item was copied instead.")
             }
         }
     }
@@ -53,7 +56,9 @@ public final class PasteCoordinator {
             throw PasteError.accessibilityPermissionRequired
         }
         try copy(item)
-        targetApplication?.activate()
+        guard let targetApplication, !targetApplication.isTerminated, targetApplication.activate() else {
+            throw PasteError.targetUnavailable
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             let source = CGEventSource(stateID: .hidSystemState)
             let down = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true)

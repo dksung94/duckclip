@@ -93,6 +93,7 @@ public enum AgentEventParser {
         let receivedAt = ISO8601DateFormatter().date(from: root["received_at"] as? String ?? "") ?? Date()
         let response = string(payload, "last_assistant_message", "lastAssistantMessage")
         let notificationType = string(payload, "notification_type", "notificationType")
+        let toolName = string(payload, "tool_name", "toolName")
 
         let kind: AgentEventKind
         switch eventName.lowercased() {
@@ -100,6 +101,13 @@ public enum AgentEventParser {
             kind = .responseCompleted
         case "permissionrequest", "permission_request":
             kind = .approvalRequired
+        case "pretooluse", "pre_tool_use":
+            if toolName?.lowercased().contains("request_user_input") == true
+                || (root["event"] as? String)?.lowercased() == "input-request" {
+                kind = .inputRequired
+            } else {
+                kind = .ignored
+            }
         case "notification":
             if notificationType == "permission_prompt" {
                 kind = .approvalRequired
@@ -120,7 +128,6 @@ public enum AgentEventParser {
 
         let providerName = provider.displayName
         let projectName = projectPath.map { URL(fileURLWithPath: $0).lastPathComponent }
-        let toolName = string(payload, "tool_name", "toolName")
         let toolInput = (payload["tool_input"] as? [String: Any])
             ?? (payload["toolInput"] as? [String: Any])
         let description = toolInput?["description"] as? String

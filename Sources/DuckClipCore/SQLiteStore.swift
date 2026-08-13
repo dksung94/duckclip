@@ -220,6 +220,25 @@ public final class SQLiteStore: @unchecked Sendable {
         }
     }
 
+    public func count(sources: [ItemSource]? = nil) throws -> Int {
+        try withLock {
+            var sql = "SELECT COUNT(*) FROM items WHERE deleted_at IS NULL"
+            if let sources {
+                guard !sources.isEmpty else { return 0 }
+                sql += " AND source IN (\(Array(repeating: "?", count: sources.count).joined(separator: ", ")))"
+            }
+            let statement = try prepare(sql + ";")
+            defer { sqlite3_finalize(statement) }
+            if let sources {
+                for (offset, source) in sources.enumerated() {
+                    bind(source.rawValue, at: Int32(offset + 1), in: statement)
+                }
+            }
+            guard sqlite3_step(statement) == SQLITE_ROW else { return 0 }
+            return Int(sqlite3_column_int64(statement, 0))
+        }
+    }
+
     public func sessions(source: ItemSource? = nil) throws -> [AgentSessionSummary] {
         try withLock {
             var whereClause = "deleted_at IS NULL AND source IN ('claude', 'codex') AND (session_id IS NOT NULL OR agent_id IS NOT NULL)"

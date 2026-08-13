@@ -8,13 +8,10 @@ final class HotKeyManager {
 
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
+    private var nextIdentifier: UInt32 = 1
 
     @discardableResult
     func register(_ shortcut: GlobalShortcut) -> Bool {
-        if let hotKeyRef {
-            UnregisterEventHotKey(hotKeyRef)
-            self.hotKeyRef = nil
-        }
         if handlerRef == nil {
             var eventType = EventTypeSpec(
                 eventClass: OSType(kEventClassKeyboard),
@@ -36,16 +33,21 @@ final class HotKeyManager {
             guard status == noErr else { return false }
         }
 
-        let identifier = EventHotKeyID(signature: Self.signature("DUCK"), id: 1)
+        nextIdentifier &+= 1
+        let identifier = EventHotKeyID(signature: Self.signature("DUCK"), id: nextIdentifier)
+        var candidate: EventHotKeyRef?
         let status = RegisterEventHotKey(
             UInt32(kVK_ANSI_V),
             modifiers(for: shortcut),
             identifier,
             GetApplicationEventTarget(),
             0,
-            &hotKeyRef
+            &candidate
         )
-        return status == noErr && hotKeyRef != nil
+        guard status == noErr, let candidate else { return false }
+        if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
+        hotKeyRef = candidate
+        return true
     }
 
     deinit {

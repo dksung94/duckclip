@@ -1,9 +1,18 @@
 import AppKit
 import Foundation
 
+public enum ClipboardCaptureStatus: Sendable, Equatable {
+    case paused
+    case protectedContent
+    case excludedApplication(String?)
+    case unsupportedContent
+    case imageStorageFailed(String)
+}
+
 @MainActor
 public final class ClipboardMonitor {
     public var onCapture: ((ClipItem) -> Void)?
+    public var onStatus: ((ClipboardCaptureStatus) -> Void)?
 
     private let pasteboard: NSPasteboard
     private let blobStore: BlobStore
@@ -47,15 +56,39 @@ public final class ClipboardMonitor {
     private func poll() {
         guard pasteboard.changeCount != lastChangeCount else { return }
         lastChangeCount = pasteboard.changeCount
-        guard settings.captureEnabled else { return }
-        guard !concealedTypes.contains(where: { pasteboard.availableType(from: [$0]) != nil }) else { return }
+        guard settings.captureEnabled else {
+            onStatus?(.paused)
+            return
+        }
+        guard !concealedTypes.contains(where: { pasteboard.availableType(from: [$0]) != nil }) else {
+            onStatus?(.protectedContent)
+            return
+        }
 
         let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        guard bundleID != Bundle.main.bundleIdentifier else { return }
-        guard bundleID.map({ !settings.excludedAppBundleIDs.contains($0) }) ?? true else { return }
+        guard bundleID.map({ !settings.excludedAppBundleIDs.contains($0) }) ?? true else {
+            onStatus?(.excludedApplication(bundleID))
+            return
+        }
 
-        if let item = captureFileURLs(bundleID: bundleID) ?? captureImage(bundleID: bundleID) ?? captureText(bundleID: bundleID) {
+        if let item = captureFileURLs(bundleID: bundleID) {
             onCapture?(item)
+            return
+        }
+        if pasteboard.data(forType: .png) != nil || pasteboard.data(forType: .tiff) != nil {
+            do {
+                if let item = try captureImage(bundleID: bundleID) {
+                    onCapture?(item)
+                }
+            } catch {
+                onStatus?(.imageStorageFailed(error.localizedDescription))
+            }
+            return
+        }
+        if let item = captureText(bundleID: bundleID) {
+            onCapture?(item)
+        } else {
+            onStatus?(.unsupportedContent)
         }
     }
 
@@ -77,7 +110,7 @@ public final class ClipboardMonitor {
         )
     }
 
-    private func captureImage(bundleID: String?) -> ClipItem? {
+    private func captureImage(bundleID: String?) throws -> ClipItem? {
         let data: Data?
         let fileExtension: String
         if let png = pasteboard.data(forType: .png) {
@@ -89,7 +122,8 @@ public final class ClipboardMonitor {
         } else {
             return nil
         }
-        guard let data, let url = try? blobStore.store(data, fileExtension: fileExtension) else { return nil }
+        guard let data else { return nil }
+        let url = try blobStore.store(data, fileExtension: fileExtension)
         let description = "Image \(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file))"
         return ClipItem(
             kind: .image,

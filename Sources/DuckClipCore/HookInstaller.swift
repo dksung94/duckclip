@@ -33,7 +33,7 @@ public struct HookInstallationStatus: Sendable {
         ),
         codex: ProviderHookStatus(
             provider: .codex,
-            expectedEvents: ["Stop", "PermissionRequest"],
+            expectedEvents: ["Stop", "PermissionRequest", "PreToolUse"],
             installedEvents: [],
             helperExecutable: false
         ),
@@ -96,7 +96,12 @@ public final class HookInstaller: @unchecked Sendable {
     ]
     private static let codexSpecs = [
         HookSpec(eventName: "Stop", argument: "stop"),
-        HookSpec(eventName: "PermissionRequest", argument: "permission-request")
+        HookSpec(eventName: "PermissionRequest", argument: "permission-request"),
+        HookSpec(
+            eventName: "PreToolUse",
+            argument: "input-request",
+            matcher: "request_user_input|functions.request_user_input"
+        )
     ]
 
     public init(

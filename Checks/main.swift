@@ -52,6 +52,8 @@ func checkStore() throws {
         try require(try store.search(source: .clipboard).map(\.id) == [clipboard.id], "Source filter failed")
         try require(try store.search(sources: [.claude, .codex]).map(\.id) == [agent.id], "Agent source filter failed")
         try require(try store.search(agentID: "agent-9").map(\.id) == [agent.id], "Agent ID filter failed")
+        try require(try store.count() == 2, "All item count failed")
+        try require(try store.count(sources: [.clipboard]) == 1, "Clipboard item count failed")
         try require(!store.insert(agent), "Agent turn insertion was not idempotent")
         try require(try store.sessions().first?.agentID == "agent-9", "Agent grouping failed")
         try store.setPinned(id: clipboard.id, pinned: true)
@@ -98,6 +100,16 @@ func checkAgentEvents() throws {
         ]
     ])
     try require(try AgentEventParser.parse(envelope: notification).kind == .inputRequired, "Input notification parsing failed")
+
+    let codexInput = try JSONSerialization.data(withJSONObject: [
+        "provider": "codex",
+        "event": "input-request",
+        "payload": [
+            "hook_event_name": "PreToolUse",
+            "tool_name": "functions.request_user_input"
+        ]
+    ])
+    try require(try AgentEventParser.parse(envelope: codexInput).kind == .inputRequired, "Codex input request parsing failed")
 }
 
 func checkHistoryParsers() throws {

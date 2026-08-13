@@ -41,11 +41,14 @@ public final class DuckClipSettings: ObservableObject {
         static let retentionDays = "retentionDays"
         static let notificationsEnabled = "notificationsEnabled"
         static let completionNotifications = "completionNotifications"
+        static let inputNotifications = "inputNotifications"
         static let approvalNotifications = "approvalNotifications"
+        static let failureNotifications = "failureNotifications"
         static let notificationPreviewMode = "notificationPreviewMode"
         static let excludedApps = "excludedApps"
         static let excludedProjects = "excludedProjects"
         static let globalShortcut = "globalShortcut"
+        static let hasCompletedOnboarding = "hasCompletedOnboarding"
     }
 
     private let defaults: UserDefaults
@@ -55,21 +58,26 @@ public final class DuckClipSettings: ObservableObject {
     @Published public var retentionDays: Int { didSet { save() } }
     @Published public var notificationsEnabled: Bool { didSet { save() } }
     @Published public var completionNotifications: Bool { didSet { save() } }
+    @Published public var inputNotifications: Bool { didSet { save() } }
     @Published public var approvalNotifications: Bool { didSet { save() } }
+    @Published public var failureNotifications: Bool { didSet { save() } }
     @Published public var notificationPreviewMode: NotificationPreviewMode { didSet { save() } }
     @Published public var excludedAppsText: String { didSet { save() } }
     @Published public var excludedProjectsText: String { didSet { save() } }
     @Published public var globalShortcut: GlobalShortcut { didSet { save() } }
+    @Published public var hasCompletedOnboarding: Bool { didSet { save() } }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         defaults.register(defaults: [
             Key.captureEnabled: true,
-            Key.autoPaste: true,
+            Key.autoPaste: false,
             Key.retentionDays: 30,
             Key.notificationsEnabled: false,
             Key.completionNotifications: true,
+            Key.inputNotifications: true,
             Key.approvalNotifications: true,
+            Key.failureNotifications: true,
             Key.notificationPreviewMode: NotificationPreviewMode.metadataOnly.rawValue,
             Key.excludedApps: [
                 "com.1password.1password",
@@ -78,20 +86,24 @@ public final class DuckClipSettings: ObservableObject {
                 "com.apple.keychainaccess"
             ].joined(separator: "\n"),
             Key.excludedProjects: "",
-            Key.globalShortcut: GlobalShortcut.commandShiftV.rawValue
+            Key.globalShortcut: GlobalShortcut.commandShiftV.rawValue,
+            Key.hasCompletedOnboarding: false
         ])
         captureEnabled = defaults.bool(forKey: Key.captureEnabled)
         autoPaste = defaults.bool(forKey: Key.autoPaste)
         retentionDays = max(1, defaults.integer(forKey: Key.retentionDays))
         notificationsEnabled = defaults.bool(forKey: Key.notificationsEnabled)
         completionNotifications = defaults.bool(forKey: Key.completionNotifications)
+        inputNotifications = defaults.bool(forKey: Key.inputNotifications)
         approvalNotifications = defaults.bool(forKey: Key.approvalNotifications)
+        failureNotifications = defaults.bool(forKey: Key.failureNotifications)
         notificationPreviewMode = NotificationPreviewMode(
             rawValue: defaults.string(forKey: Key.notificationPreviewMode) ?? ""
         ) ?? .metadataOnly
         excludedAppsText = defaults.string(forKey: Key.excludedApps) ?? ""
         excludedProjectsText = defaults.string(forKey: Key.excludedProjects) ?? ""
         globalShortcut = GlobalShortcut(rawValue: defaults.string(forKey: Key.globalShortcut) ?? "") ?? .commandShiftV
+        hasCompletedOnboarding = defaults.bool(forKey: Key.hasCompletedOnboarding)
     }
 
     public var excludedAppBundleIDs: Set<String> {
@@ -113,11 +125,14 @@ public final class DuckClipSettings: ObservableObject {
         defaults.set(retentionDays, forKey: Key.retentionDays)
         defaults.set(notificationsEnabled, forKey: Key.notificationsEnabled)
         defaults.set(completionNotifications, forKey: Key.completionNotifications)
+        defaults.set(inputNotifications, forKey: Key.inputNotifications)
         defaults.set(approvalNotifications, forKey: Key.approvalNotifications)
+        defaults.set(failureNotifications, forKey: Key.failureNotifications)
         defaults.set(notificationPreviewMode.rawValue, forKey: Key.notificationPreviewMode)
         defaults.set(excludedAppsText, forKey: Key.excludedApps)
         defaults.set(excludedProjectsText, forKey: Key.excludedProjects)
         defaults.set(globalShortcut.rawValue, forKey: Key.globalShortcut)
+        defaults.set(hasCompletedOnboarding, forKey: Key.hasCompletedOnboarding)
     }
 
     private static func lines(_ text: String) -> [String] {

@@ -8,60 +8,164 @@ struct DuckClipApplication: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        MenuBarExtra("DuckClip", systemImage: "doc.on.clipboard.fill") {
-            MenuBarContent(model: delegate.model, showPalette: delegate.showPalette)
+        MenuBarExtra {
+            MenuBarRoot(delegate: delegate)
+        } label: {
+            MenuBarLabel(delegate: delegate)
         }
 
         Settings {
-            SettingsView(model: delegate.model)
+            SettingsRoot(delegate: delegate)
         }
     }
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    let model: AppModel
+final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    @Published private(set) var model: AppModel?
+    @Published private(set) var startupError: String?
+
     private var panelController: PalettePanelController?
     private let hotKey = HotKeyManager()
     private var cancellables: Set<AnyCancellable> = []
 
-    override init() {
-        do {
-            model = try AppModel()
-        } catch {
-            fatalError("DuckClip could not start: \(error.localizedDescription)")
-        }
-        super.init()
-    }
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
-        let panelController = PalettePanelController(model: model)
-        self.panelController = panelController
-        model.openPalette = { [weak panelController] itemID in
-            panelController?.show(selecting: itemID)
-        }
-        hotKey.onInvoke = { [weak panelController] in panelController?.toggle() }
-        registerHotKey(model.settings.globalShortcut)
-        model.settings.$globalShortcut
-            .dropFirst()
-            .removeDuplicates()
-            .sink { [weak self] shortcut in self?.registerHotKey(shortcut) }
-            .store(in: &cancellables)
-        model.start()
+        startModel()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        model.refreshNotificationAuthorization()
-        model.refreshAccessibilityPermission()
+        model?.refreshNotificationAuthorization()
+        model?.refreshAccessibilityPermission()
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showPalette()
+        return true
     }
 
     func showPalette() {
         panelController?.show()
     }
 
+    func retryStartup() {
+        startModel()
+    }
+
+    func openApplicationSupport() {
+        guard let support = try? FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        ) else { return }
+        NSWorkspace.shared.open(support)
+    }
+
+    private func startModel() {
+        do {
+            let model = try AppModel()
+            startupError = nil
+            self.model = model
+            let panelController = PalettePanelController(model: model)
+            self.panelController = panelController
+            model.openPalette = { [weak panelController] itemID in
+                panelController?.show(selecting: itemID)
+            }
+            hotKey.onInvoke = { [weak panelController] in panelController?.toggle() }
+            registerHotKey(model.settings.globalShortcut)
+            cancellables.removeAll()
+            model.settings.$globalShortcut
+                .dropFirst()
+                .removeDuplicates()
+                .sink { [weak self] shortcut in self?.registerHotKey(shortcut) }
+                .store(in: &cancellables)
+            model.start()
+            if !model.settings.hasCompletedOnboarding || CommandLine.arguments.contains("--show-palette") {
+                Task { @MainActor [weak panelController] in
+                    try? await Task.sleep(for: .milliseconds(250))
+                    panelController?.show()
+                }
+            }
+        } catch {
+            model = nil
+            panelController = nil
+            startupError = error.localizedDescription
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+    }
+
     private func registerHotKey(_ shortcut: GlobalShortcut) {
-        model.shortcutRegistrationSucceeded = hotKey.register(shortcut)
+        model?.shortcutRegistrationSucceeded = hotKey.register(shortcut)
+    }
+}
+
+private struct MenuBarRoot: View {
+    @ObservedObject var delegate: AppDelegate
+
+    var body: some View {
+        if let model = delegate.model {
+            MenuBarContent(model: model, showPalette: delegate.showPalette)
+        } else if let error = delegate.startupError {
+            Text("DuckClip could not start")
+            Text(error).font(.caption)
+            Divider()
+            Button("Retry") { delegate.retryStartup() }
+            Button("Open Application Support") { delegate.openApplicationSupport() }
+            Divider()
+            Button("Quit DuckClip") { NSApplication.shared.terminate(nil) }
+        } else {
+            Text("Starting DuckClip…")
+        }
+    }
+}
+
+private struct SettingsRoot: View {
+    @ObservedObject var delegate: AppDelegate
+
+    var body: some View {
+        if let model = delegate.model {
+            SettingsView(model: model)
+        } else {
+            ContentUnavailableView {
+                Label("DuckClip could not start", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(delegate.startupError ?? String(localized: "Unknown startup error"))
+            } actions: {
+                Button("Retry") { delegate.retryStartup() }
+                Button("Open Application Support") { delegate.openApplicationSupport() }
+            }
+            .frame(width: 520, height: 320)
+        }
+    }
+}
+
+private struct MenuBarLabel: View {
+    @ObservedObject var delegate: AppDelegate
+
+    var body: some View {
+        if let model = delegate.model {
+            CaptureStatusIcon(model: model)
+        } else {
+            Image(systemName: "exclamationmark.triangle.fill")
+        }
+    }
+}
+
+private struct CaptureStatusIcon: View {
+    @ObservedObject var model: AppModel
+    @ObservedObject private var settings: DuckClipSettings
+
+    init(model: AppModel) {
+        self.model = model
+        _settings = ObservedObject(wrappedValue: model.settings)
+    }
+
+    var body: some View {
+        Image(systemName: !model.shortcutRegistrationSucceeded
+            ? "exclamationmark.triangle.fill"
+            : settings.captureEnabled ? "doc.on.clipboard.fill" : "pause.circle.fill")
+            .accessibilityLabel(settings.captureEnabled ? "DuckClip recording" : "DuckClip paused")
     }
 }
 
@@ -78,10 +182,16 @@ private struct MenuBarContent: View {
 
     var body: some View {
         Button("Open DuckClip (\(settings.globalShortcut.displayName))") { showPalette() }
+        if !model.shortcutRegistrationSucceeded {
+            Label("The selected shortcut is unavailable", systemImage: "exclamationmark.triangle.fill")
+        }
         Button(settings.captureEnabled
             ? String(localized: "Pause Clipboard Recording")
             : String(localized: "Resume Clipboard Recording")) {
             settings.captureEnabled.toggle()
+        }
+        if !settings.captureEnabled {
+            Text("Clipboard recording is paused").foregroundStyle(.secondary)
         }
         Divider()
         SettingsLink { Text("Settings…") }

@@ -7,6 +7,7 @@ import UserNotifications
 final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate {
     var onOpen: ((String?) -> Void)?
     var onCopy: ((String) -> Void)?
+    var onError: ((String) -> Void)?
 
     private let center = UNUserNotificationCenter.current()
     private var recentKeys: [String: Date] = [:]
@@ -14,8 +15,8 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
     override init() {
         super.init()
         center.delegate = self
-        let copy = UNNotificationAction(identifier: "COPY", title: "Copy response")
-        let open = UNNotificationAction(identifier: "OPEN", title: "Open DuckClip", options: [.foreground])
+        let copy = UNNotificationAction(identifier: "COPY", title: String(localized: "Copy response"))
+        let open = UNNotificationAction(identifier: "OPEN", title: String(localized: "Open DuckClip"), options: [.foreground])
         center.setNotificationCategories([
             UNNotificationCategory(identifier: "AGENT_RESPONSE", actions: [copy, open], intentIdentifiers: []),
             UNNotificationCategory(identifier: "AGENT_ALERT", actions: [open], intentIdentifiers: [])
@@ -48,11 +49,18 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         content.sound = .default
         content.categoryIdentifier = itemID == nil ? "AGENT_ALERT" : "AGENT_RESPONSE"
         content.userInfo = ["item_id": itemID ?? ""]
-        center.add(UNNotificationRequest(
+        let request = UNNotificationRequest(
             identifier: UUID().uuidString,
             content: content,
             trigger: nil
-        ))
+        )
+        Task { [weak self] in
+            do {
+                try await self?.center.add(request)
+            } catch {
+                self?.onError?(error.localizedDescription)
+            }
+        }
     }
 
     private func body(for event: AgentEvent, mode: NotificationPreviewMode) -> String {

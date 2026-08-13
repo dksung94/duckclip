@@ -46,4 +46,17 @@ final class AgentEventTests: XCTestCase {
         XCTAssertEqual(event.kind, .approvalRequired)
         XCTAssertTrue(event.message.contains("swift test"))
     }
+
+    func testParsesCodexInputRequest() throws {
+        let data = try JSONSerialization.data(withJSONObject: [
+            "provider": "codex",
+            "event": "input-request",
+            "payload": [
+                "hook_event_name": "PreToolUse",
+                "tool_name": "functions.request_user_input",
+                "session_id": "session-codex"
+            ]
+        ])
+        XCTAssertEqual(try AgentEventParser.parse(envelope: data).kind, .inputRequired)
+    }
 }

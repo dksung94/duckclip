@@ -4,6 +4,7 @@ import SwiftUI
 
 struct PaletteView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject private var settings: DuckClipSettings
     let onActivate: (ClipItem) -> Void
     let onPaste: (ClipItem) -> Void
     let onCopy: (ClipItem) -> Void
@@ -11,29 +12,39 @@ struct PaletteView: View {
 
     @FocusState private var searchFocused: Bool
 
+    init(
+        model: AppModel,
+        onActivate: @escaping (ClipItem) -> Void,
+        onPaste: @escaping (ClipItem) -> Void,
+        onCopy: @escaping (ClipItem) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.model = model
+        _settings = ObservedObject(wrappedValue: model.settings)
+        self.onActivate = onActivate
+        self.onPaste = onPaste
+        self.onCopy = onCopy
+        self.onDismiss = onDismiss
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            HSplitView {
-                itemList
-                    .frame(minWidth: 330, idealWidth: 390)
-                preview
-                    .frame(minWidth: 300)
+        Group {
+            if settings.hasCompletedOnboarding {
+                palette
+            } else {
+                onboarding
             }
-            Divider()
-            footer
         }
         .frame(minWidth: 680, minHeight: 420)
         .background(.ultraThinMaterial)
         .onAppear {
-            searchFocused = true
+            searchFocused = settings.hasCompletedOnboarding
             model.reload()
         }
         .onMoveCommand { direction in
             switch direction {
-            case .up: model.moveSelection(by: -1, orderedIDs: visibleItemIDs)
-            case .down: model.moveSelection(by: 1, orderedIDs: visibleItemIDs)
+            case .up: model.moveSelection(by: -1, orderedIDs: model.items.map(\.id))
+            case .down: model.moveSelection(by: 1, orderedIDs: model.items.map(\.id))
             default: break
             }
         }
@@ -56,6 +67,80 @@ struct PaletteView: View {
         }
     }
 
+    private var palette: some View {
+        VStack(spacing: 0) {
+            header
+            if let activity = model.agentActivityNotice {
+                AgentActivityBanner(activity: activity) {
+                    model.dismissAgentActivityNotice()
+                }
+                Divider()
+            }
+            if let notice = model.paletteNotice {
+                NoticeBanner(notice: notice) {
+                    model.performNoticeAction(notice)
+                } onDismiss: {
+                    model.dismissPaletteNotice()
+                }
+                Divider()
+            }
+            if let message = model.passiveStatusMessage {
+                PassiveStatusBanner(message: message)
+                Divider()
+            }
+            Divider()
+            HSplitView {
+                itemList
+                    .frame(minWidth: 330, idealWidth: 390)
+                preview
+                    .frame(minWidth: 300)
+            }
+            Divider()
+            footer
+        }
+    }
+
+    private var onboarding: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            Image(systemName: "doc.on.clipboard.fill")
+                .font(.system(size: 54))
+                .foregroundStyle(.tint)
+                .accessibilityHidden(true)
+            VStack(spacing: 8) {
+                Text("Welcome to DuckClip")
+                    .font(.largeTitle.bold())
+                Text("Your clipboard and agent responses stay on this Mac.")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 14) {
+                OnboardingRow(
+                    icon: "keyboard",
+                    title: "Open from anywhere",
+                    detail: String(format: String(localized: "Press %@ to open DuckClip."), settings.globalShortcut.displayName)
+                )
+                OnboardingRow(icon: "checkmark.shield", title: "Private by default", detail: "Password-manager and protected clipboard content is not recorded.")
+                OnboardingRow(icon: "bell", title: "Agent alerts are optional", detail: "Enable completion, input, approval, and failure alerts in Settings.")
+            }
+            .frame(maxWidth: 470)
+            HStack(spacing: 12) {
+                Button("Set up notifications") {
+                    model.setNotificationsEnabled(true)
+                }
+                .disabled(model.notificationRequestInFlight)
+                Button("Get Started") {
+                    settings.hasCompletedOnboarding = true
+                    searchFocused = true
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+            Spacer()
+        }
+        .padding(32)
+    }
+
     private var header: some View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
@@ -65,9 +150,6 @@ struct PaletteView: View {
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .focused($searchFocused)
-                    .onSubmit {
-                        if let item = model.selectedItem { onActivate(item) }
-                    }
                 if !model.query.isEmpty {
                     Button {
                         model.query = ""
@@ -86,11 +168,11 @@ struct PaletteView: View {
             HStack(spacing: 12) {
                 Picker("Source", selection: $model.sourceFilter) {
                     ForEach(SourceFilter.allCases) { filter in
-                        Text(filter.displayName).tag(filter)
+                        Text("\(filter.displayName) \(model.itemCounts[filter])").tag(filter)
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(maxWidth: 320)
+                .frame(maxWidth: 350)
 
                 if model.sourceFilter != .clipboard {
                     Picker("Project", selection: $model.projectFilter) {
@@ -112,63 +194,75 @@ struct PaletteView: View {
                     .frame(maxWidth: 210)
                 }
                 Spacer(minLength: 0)
+                if hasActiveFilters {
+                    Button("Reset filters") { model.resetFilters() }
+                        .buttonStyle(.borderless)
+                }
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 10)
         }
     }
 
+    @ViewBuilder
     private var itemList: some View {
-        Group {
-            if missingAgentIntegrations && model.items.isEmpty {
-                ContentUnavailableView {
-                    Label("Agent integrations are not installed", systemImage: "link.badge.plus")
-                } description: {
-                    Text("Install the Claude and Codex hooks before DuckClip can collect new responses.")
-                } actions: {
-                    Button("Install integrations") { model.installHooks() }
-                }
-            } else if model.items.isEmpty {
-                ContentUnavailableView(
-                    "Nothing found",
-                    systemImage: "doc.on.clipboard",
-                    description: Text("Copy something or adjust the filters.")
-                )
-            } else {
-                List(selection: $model.selectedItemID) {
-                    ForEach(itemGroups) { group in
-                        Section {
-                            ForEach(group.items) { item in
-                                ItemRow(item: item)
-                                    .tag(item.id)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        model.selectedItemID = item.id
-                                    }
-                                    .simultaneousGesture(
-                                        TapGesture(count: 2)
-                                            .onEnded { onActivate(item) }
-                                    )
-                                    .accessibilityAction(.default) { onActivate(item) }
-                                    .accessibilityAction(named: Text("Copy")) { onCopy(item) }
-                                    .accessibilityAction(named: Text("Paste")) { onPaste(item) }
-                                    .contextMenu {
-                                        Button("Paste") { onPaste(item) }
-                                        Button("Copy") { onCopy(item) }
-                                        Button(item.isPinned ? String(localized: "Unpin") : String(localized: "Pin")) {
-                                            model.togglePinned(item)
-                                        }
-                                        Divider()
-                                        Button("Delete", role: .destructive) { model.delete(item) }
-                                    }
-                            }
-                        } header: {
-                            ItemGroupHeader(group: group)
-                        }
-                    }
-                }
-                .listStyle(.inset)
+        if missingAgentIntegrations && model.items.isEmpty {
+            ContentUnavailableView {
+                Label("Agent integrations are not installed", systemImage: "link.badge.plus")
+            } description: {
+                Text("Install the Claude and Codex hooks before DuckClip can collect new responses.")
+            } actions: {
+                Button("Install integrations") { model.installHooks() }
             }
+        } else if model.items.isEmpty, !settings.captureEnabled, model.sourceFilter != .agents {
+            ContentUnavailableView {
+                Label("Clipboard recording is paused", systemImage: "pause.circle")
+            } description: {
+                Text("Resume recording to collect new clipboard items.")
+            } actions: {
+                Button("Resume Clipboard Recording") { settings.captureEnabled = true }
+            }
+        } else if model.items.isEmpty {
+            ContentUnavailableView {
+                Label(hasActiveFilters ? "No matching items" : "Nothing found", systemImage: "doc.on.clipboard")
+            } description: {
+                Text(hasActiveFilters ? "Try a broader search or reset the filters." : "Copy something to add it to DuckClip.")
+            } actions: {
+                if hasActiveFilters {
+                    Button("Reset filters") { model.resetFilters() }
+                }
+            }
+        } else {
+            List(selection: $model.selectedItemID) {
+                ForEach(model.items) { item in
+                    ItemRow(item: item)
+                        .tag(item.id)
+                        .contentShape(Rectangle())
+                        .onTapGesture { model.selectedItemID = item.id }
+                        .simultaneousGesture(TapGesture(count: 2).onEnded { onActivate(item) })
+                        .accessibilityAction(.default) { onActivate(item) }
+                        .accessibilityAction(named: Text("Copy")) { onCopy(item) }
+                        .accessibilityAction(named: Text("Paste")) { onPaste(item) }
+                        .contextMenu {
+                            Button(pasteActionLabel) { onPaste(item) }
+                            Button("Copy") { onCopy(item) }
+                            Button(item.isPinned ? String(localized: "Unpin") : String(localized: "Pin")) {
+                                model.togglePinned(item)
+                            }
+                            Divider()
+                            Button("Delete", role: .destructive) { model.delete(item) }
+                        }
+                }
+                if model.resultsTruncated {
+                    HStack {
+                        Spacer()
+                        Button("Load 300 more") { model.loadMore() }
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                }
+            }
+            .listStyle(.inset)
         }
     }
 
@@ -178,39 +272,15 @@ struct PaletteView: View {
             && !model.hookStatus.codexInstalled
     }
 
-    private var itemGroups: [ItemGroup] {
-        if !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return [ItemGroup(id: "search-results", items: model.items, title: String(localized: "Search results"))]
-        }
-        var groups: [String: ItemGroup] = [:]
-        var order: [String] = []
-        for item in model.items {
-            let key: String
-            if item.source == .clipboard {
-                key = "clipboard"
-            } else {
-                key = [
-                    item.source.rawValue,
-                    item.projectPath ?? "",
-                    item.agentIdentityID ?? "unassigned"
-                ].joined(separator: ":")
-            }
-            if groups[key] == nil {
-                order.append(key)
-                groups[key] = ItemGroup(id: key, items: [])
-            }
-            groups[key]?.items.append(item)
-        }
-        return order.compactMap { groups[$0] }
-    }
-
-    private var visibleItemIDs: [String] {
-        itemGroups.flatMap { $0.items.map(\.id) }
+    private var hasActiveFilters: Bool {
+        model.sourceFilter != .all
+            || model.projectFilter != nil
+            || model.conversationFilter != nil
+            || !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func projectLabel(_ path: String) -> String {
-        let components = URL(fileURLWithPath: path).standardized.pathComponents
-        return components.suffix(2).joined(separator: "/")
+        URL(fileURLWithPath: path).standardized.pathComponents.suffix(2).joined(separator: "/")
     }
 
     private func conversationLabel(_ session: AgentSessionSummary) -> String {
@@ -242,36 +312,33 @@ struct PaletteView: View {
                     }
                 }
 
-                HStack(spacing: 8) {
-                    if let project = item.projectName {
-                        Text(project).badgeStyle()
+                ViewThatFits(in: .horizontal) {
+                    metadata(for: item)
+                    VStack(alignment: .leading, spacing: 6) {
+                        metadataBadges(for: item)
+                        Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    if let agent = item.agentID {
-                        Text("Agent \(agent.prefix(10))").badgeStyle()
-                    }
-                    if let session = item.sessionID {
-                        Text("Session \(session.prefix(8))").badgeStyle()
-                    }
-                    Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
 
                 switch item.kind {
                 case .image:
-                    if let path = item.payloadPath, let image = NSImage(contentsOfFile: path) {
-                        Image(nsImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .accessibilityLabel(item.title)
-                    } else {
-                        ContentUnavailableView("Image unavailable", systemImage: "photo.badge.exclamationmark")
+                    ImagePreview(item: item)
+                case .file:
+                    FilePreview(item: item)
+                case .url:
+                    URLPreview(item: item)
+                case .agentResponse:
+                    ScrollView {
+                        Text(markdown: item.text)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                            .padding(.trailing, 8)
                     }
-                default:
+                case .text:
                     ScrollView {
                         Text(item.text)
-                            .font(.system(.body, design: item.source == .clipboard ? .default : .monospaced))
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .topLeading)
                             .padding(.trailing, 8)
@@ -285,13 +352,33 @@ struct PaletteView: View {
         }
     }
 
+    private func metadata(for item: ClipItem) -> some View {
+        HStack(spacing: 8) {
+            metadataBadges(for: item)
+            Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func metadataBadges(for item: ClipItem) -> some View {
+        HStack(spacing: 8) {
+            if let app = ApplicationMetadata(bundleID: item.sourceAppBundleID) {
+                Label(app.name, systemImage: "app")
+                    .badgeStyle()
+            }
+            if let project = item.projectName { Text(project).badgeStyle() }
+            if let agent = item.agentID { Text("Agent \(agent.prefix(10))").badgeStyle() }
+            if let session = item.sessionID { Text("Session \(session.prefix(8))").badgeStyle() }
+        }
+    }
+
     private var footer: some View {
         VStack(spacing: 0) {
             if let deletedTitle = model.recentlyDeletedTitle {
                 HStack(spacing: 10) {
                     Image(systemName: "trash")
-                    Text("Deleted “\(deletedTitle)”")
-                        .lineLimit(1)
+                    Text("Deleted “\(deletedTitle)”").lineLimit(1)
                     Spacer()
                     Button("Undo") { model.undoDelete() }
                         .keyboardShortcut("z", modifiers: .command)
@@ -301,75 +388,142 @@ struct PaletteView: View {
                 .background(Color.accentColor.opacity(0.12))
                 Divider()
             }
-            HStack(spacing: 14) {
-                HStack(spacing: 14) {
-                    Text("\(model.settings.globalShortcut.displayName) Open")
+            HStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    Text("\(settings.globalShortcut.displayName) Open")
                     Text("↑↓ Navigate")
-                    Text(model.settings.autoPaste
-                        ? LocalizedStringKey("↩ Paste")
-                        : LocalizedStringKey("↩ Copy"))
+                    Text("⌘C Copy")
                 }
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 Spacer()
                 if let item = model.selectedItem {
-                    Button(item.isPinned ? String(localized: "Unpin") : String(localized: "Pin")) {
+                    Button {
                         model.togglePinned(item)
+                    } label: {
+                        Label(item.isPinned ? "Unpin" : "Pin", systemImage: item.isPinned ? "pin.slash" : "pin")
                     }
-                    Button("Copy") { onCopy(item) }
-                    Button("Paste") { onPaste(item) }
+                    .labelStyle(.iconOnly)
+                    .help(item.isPinned ? "Unpin" : "Pin")
+
+                    Button("Delete", role: .destructive) { model.delete(item) }
+                        .keyboardShortcut(.delete, modifiers: [])
+
+                    if settings.autoPaste {
+                        Button("Copy") { onCopy(item) }
+                            .keyboardShortcut("c", modifiers: .command)
+                    } else {
+                        Button(action: { onCopy(item) }) { EmptyView() }
+                            .keyboardShortcut("c", modifiers: .command)
+                            .frame(width: 0, height: 0)
+                            .accessibilityHidden(true)
+                    }
+
+                    if !settings.autoPaste, model.pasteTargetName != nil {
+                        Button(pasteActionLabel) { onPaste(item) }
+                    }
+
+                    Button(primaryActionLabel) { onActivate(item) }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
                 }
                 Button("Close") { onDismiss() }
                     .keyboardShortcut(.escape, modifiers: [])
             }
+            .controlSize(.regular)
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
         }
-        .font(.caption)
+    }
+
+    private var primaryActionLabel: String {
+        guard settings.autoPaste, let target = model.pasteTargetName else { return String(localized: "Copy") }
+        return String(format: String(localized: "Paste to %@"), target)
+    }
+
+    private var pasteActionLabel: String {
+        guard let target = model.pasteTargetName else { return String(localized: "Copy (no destination app)") }
+        return String(format: String(localized: "Paste to %@"), target)
     }
 }
 
-private struct ItemGroup: Identifiable {
-    let id: String
-    var items: [ClipItem]
-    var title: String?
-
-    init(id: String, items: [ClipItem], title: String? = nil) {
-        self.id = id
-        self.items = items
-        self.title = title
-    }
-
-    var representative: ClipItem? { items.first }
-}
-
-private struct ItemGroupHeader: View {
-    let group: ItemGroup
+private struct OnboardingRow: View {
+    let icon: String
+    let title: LocalizedStringKey
+    let detail: String
 
     var body: some View {
-        if let item = group.representative {
-            HStack(spacing: 6) {
-                if let title = group.title {
-                    Text(title)
-                } else if item.source == .clipboard {
-                    Label("Clipboard", systemImage: "doc.on.clipboard")
-                } else {
-                    let kind = item.agentID == nil ? String(localized: "Session") : String(localized: "Agent")
-                    let identity = item.agentIdentityID ?? String(localized: "Unassigned")
-                    Text("\(kind) \(identity.prefix(12))")
-                    Text(item.source.displayName)
-                        .providerBadge(item.source)
-                    if let project = item.projectName {
-                        Text(project)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                Spacer()
-                Text("\(group.items.count)")
-                    .foregroundStyle(.tertiary)
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(.tint)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline)
+                Text(detail).foregroundStyle(.secondary)
             }
-            .font(.caption)
-            .textCase(nil)
         }
+    }
+}
+
+private struct NoticeBanner: View {
+    let notice: PaletteNotice
+    let onAction: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: notice.systemImage).foregroundStyle(.tint)
+            Text(notice.message).lineLimit(2)
+            Spacer()
+            if let action = notice.action {
+                Button(action == .showAll ? "Show all" : "Resume") { onAction() }
+            }
+            Button(action: onDismiss) { Image(systemName: "xmark") }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Dismiss")
+        }
+        .font(.callout)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color.accentColor.opacity(0.1))
+    }
+}
+
+private struct PassiveStatusBanner: View {
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: "info.circle.fill")
+            .font(.callout)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color.orange.opacity(0.1))
+    }
+}
+
+private struct AgentActivityBanner: View {
+    let activity: AgentActivityNotice
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: activity.kind == .failed ? "exclamationmark.triangle.fill" : "person.wave.2.fill")
+                .foregroundStyle(activity.kind == .failed ? .red : .orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(activity.title).font(.headline)
+                Text(activity.message).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer()
+            Button(action: onDismiss) { Image(systemName: "xmark") }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Dismiss")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.12))
     }
 }
 
@@ -378,15 +532,12 @@ private struct ItemRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: Self.icon(for: item))
-                .frame(width: 20)
-                .foregroundStyle(color)
-                .accessibilityHidden(true)
+            ItemThumbnail(item: item)
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.title)
-                    .lineLimit(2)
-                HStack(spacing: 6) {
+                Text(rowTitle).lineLimit(2)
+                HStack(spacing: 5) {
                     Text(item.source.displayName)
+                    if let app = ApplicationMetadata(bundleID: item.sourceAppBundleID) { Text("· \(app.name)") }
                     if let project = item.projectName { Text("· \(project)") }
                     Spacer()
                     Text(item.createdAt, style: .relative)
@@ -402,6 +553,12 @@ private struct ItemRow: View {
             }
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var rowTitle: String {
+        guard item.kind == .image, let info = ImageMetadata(item: item) else { return item.title }
+        return "\(info.dimensions) · \(info.size)"
     }
 
     static func icon(for item: ClipItem) -> String {
@@ -417,12 +574,159 @@ private struct ItemRow: View {
             }
         }
     }
+}
+
+private struct ItemThumbnail: View {
+    let item: ClipItem
+
+    var body: some View {
+        Group {
+            if item.kind == .image, let path = item.payloadPath, let image = NSImage(contentsOfFile: path) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .clipped()
+            } else if let app = ApplicationMetadata(bundleID: item.sourceAppBundleID) {
+                Image(nsImage: app.icon)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(5)
+            } else {
+                Image(systemName: ItemRow.icon(for: item))
+                    .foregroundStyle(color)
+            }
+        }
+        .frame(width: 42, height: 42)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .accessibilityHidden(true)
+    }
 
     private var color: Color {
         switch item.source {
         case .claude: .orange
         case .codex: .green
         case .clipboard: .blue
+        }
+    }
+}
+
+private struct ImagePreview: View {
+    let item: ClipItem
+
+    var body: some View {
+        if let path = item.payloadPath, let image = NSImage(contentsOfFile: path) {
+            VStack(alignment: .leading, spacing: 8) {
+                if let info = ImageMetadata(item: item) {
+                    Text("\(info.dimensions) · \(info.format.uppercased()) · \(info.size)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityLabel(item.title)
+            }
+        } else {
+            ContentUnavailableView("Image unavailable", systemImage: "photo.badge.exclamationmark")
+        }
+    }
+}
+
+private struct FilePreview: View {
+    let item: ClipItem
+
+    private var urls: [URL] {
+        item.text.components(separatedBy: .newlines).filter { !$0.isEmpty }.map(URL.init(fileURLWithPath:))
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 8) {
+                ForEach(urls, id: \.path) { url in
+                    HStack(spacing: 10) {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                            .resizable().frame(width: 32, height: 32)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(url.lastPathComponent).lineLimit(1)
+                            Text(url.deletingLastPathComponent().path)
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        Spacer()
+                        Button("Open") { NSWorkspace.shared.open(url) }
+                        Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                    }
+                    .padding(8)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+    }
+}
+
+private struct URLPreview: View {
+    let item: ClipItem
+
+    var body: some View {
+        if let url = URL(string: item.text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            VStack(alignment: .leading, spacing: 14) {
+                Label(url.host ?? url.absoluteString, systemImage: "link")
+                    .font(.title3.bold())
+                Text(url.absoluteString)
+                    .textSelection(.enabled)
+                    .foregroundStyle(.secondary)
+                Link("Open Link", destination: url)
+                    .buttonStyle(.borderedProminent)
+                Spacer()
+            }
+        } else {
+            Text(item.text).textSelection(.enabled)
+        }
+    }
+}
+
+private struct ApplicationMetadata {
+    let name: String
+    let icon: NSImage
+
+    init?(bundleID: String?) {
+        guard let bundleID, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+        name = Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? url.deletingPathExtension().lastPathComponent
+        icon = NSWorkspace.shared.icon(forFile: url.path)
+    }
+}
+
+private struct ImageMetadata {
+    let dimensions: String
+    let size: String
+    let format: String
+
+    init?(item: ClipItem) {
+        guard let path = item.payloadPath, let image = NSImage(contentsOfFile: path) else { return nil }
+        let representation = image.representations.max { lhs, rhs in
+            lhs.pixelsWide * lhs.pixelsHigh < rhs.pixelsWide * rhs.pixelsHigh
+        }
+        let width = representation?.pixelsWide ?? Int(image.size.width)
+        let height = representation?.pixelsHigh ?? Int(image.size.height)
+        dimensions = "\(width)×\(height)"
+        format = URL(fileURLWithPath: path).pathExtension
+        let bytes = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value ?? 0
+        size = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+}
+
+private extension Text {
+    init(markdown: String) {
+        if let attributed = try? AttributedString(
+            markdown: markdown,
+            options: .init(interpretedSyntax: .full)
+        ) {
+            self.init(attributed)
+        } else {
+            self.init(markdown)
         }
     }
 }
@@ -435,13 +739,5 @@ private extension View {
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(.quaternary, in: Capsule())
-    }
-
-    func providerBadge(_ source: ItemSource) -> some View {
-        self
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(source == .claude ? Color.orange.opacity(0.18) : Color.green.opacity(0.18), in: Capsule())
     }
 }

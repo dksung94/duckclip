@@ -5,6 +5,40 @@ import Foundation
 import ServiceManagement
 import UserNotifications
 
+struct LibraryCounts: Equatable, Sendable {
+    var all = 0
+    var clipboard = 0
+    var agents = 0
+
+    subscript(_ filter: SourceFilter) -> Int {
+        switch filter {
+        case .all: all
+        case .clipboard: clipboard
+        case .agents: agents
+        }
+    }
+}
+
+struct PaletteNotice: Identifiable, Equatable {
+    enum Action: Equatable {
+        case showAll
+        case resumeCapture
+    }
+
+    let id = UUID()
+    let message: String
+    let systemImage: String
+    let action: Action?
+}
+
+struct AgentActivityNotice: Identifiable, Equatable {
+    let id = UUID()
+    let provider: ItemSource
+    let kind: AgentEventKind
+    let title: String
+    let message: String
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var items: [ClipItem] = []
@@ -12,12 +46,14 @@ final class AppModel: ObservableObject {
     @Published var query = "" {
         didSet {
             guard query != oldValue else { return }
+            resultLimit = 300
             reload(refreshSessions: false, debounce: true)
         }
     }
     @Published var sourceFilter: SourceFilter = .all {
         didSet {
             guard sourceFilter != oldValue else { return }
+            resultLimit = 300
             projectFilter = nil
             conversationFilter = nil
             reload(refreshSessions: false)
@@ -26,6 +62,7 @@ final class AppModel: ObservableObject {
     @Published var projectFilter: String? {
         didSet {
             guard projectFilter != oldValue else { return }
+            resultLimit = 300
             conversationFilter = nil
             reload(refreshSessions: false)
         }
@@ -33,11 +70,18 @@ final class AppModel: ObservableObject {
     @Published var conversationFilter: String? {
         didSet {
             guard conversationFilter != oldValue else { return }
+            resultLimit = 300
             reload(refreshSessions: false)
         }
     }
     @Published var selectedItemID: String?
     @Published var errorMessage: String?
+    @Published var passiveStatusMessage: String?
+    @Published var paletteNotice: PaletteNotice?
+    @Published var agentActivityNotice: AgentActivityNotice?
+    @Published var itemCounts = LibraryCounts()
+    @Published var resultsTruncated = false
+    @Published var pasteTargetName: String?
     @Published var hookStatus = HookInstallationStatus.empty
     @Published var providerHealth: [ItemSource: ProviderHealth] = [:]
     @Published var integrationTestStatus = ""
@@ -45,6 +89,7 @@ final class AppModel: ObservableObject {
     @Published var isImporting = false
     @Published var shortcutRegistrationSucceeded = true
     @Published var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
+    @Published var notificationRequestInFlight = false
     @Published var accessibilityPermissionRequired = false
     @Published var accessibilityTrusted = false
     @Published var recentlyDeletedTitle: String?
@@ -62,8 +107,10 @@ final class AppModel: ObservableObject {
     private let notifications = NotificationCoordinator()
     private var reloadTask: Task<Void, Never>?
     private var reloadGeneration = 0
+    private var resultLimit = 300
     private var pendingDeletion: ClipItem?
     private var deletionTask: Task<Void, Never>?
+    private var passiveStatusTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
 
     var openPalette: ((String?) -> Void)? {
@@ -81,9 +128,11 @@ final class AppModel: ObservableObject {
         historyImporter = HistoryImporter(store: store)
 
         clipboardMonitor.onCapture = { [weak self] item in self?.storeItem(item) }
+        clipboardMonitor.onStatus = { [weak self] status in self?.handleClipboardStatus(status) }
         inboxMonitor.onEvent = { [weak self] event in self?.handle(event) }
-        inboxMonitor.onError = { [weak self] error in self?.errorMessage = error.localizedDescription }
+        inboxMonitor.onError = { [weak self] error in self?.showPassiveStatus(error.localizedDescription) }
         notifications.onCopy = { [weak self] itemID in self?.copy(itemID: itemID) }
+        notifications.onError = { [weak self] message in self?.showPassiveStatus(message) }
         hookStatus = hookInstaller.status()
         reloadProviderHealth()
         reload()
@@ -151,6 +200,7 @@ final class AppModel: ObservableObject {
         let projectFilter = projectFilter
         let conversationFilter = conversationFilter
         let cachedSessions = sessions
+        let limit = resultLimit
 
         reloadTask = Task { [weak self] in
             if debounce {
@@ -166,15 +216,23 @@ final class AppModel: ObservableObject {
                     let conversation = conversationFilter.flatMap { id in
                         sessions.first { $0.id == id }
                     }
-                    let items = try store.search(
+                    var items = try store.search(
                         query: query,
                         source: conversation?.provider,
                         sources: conversation == nil ? sourceFilter.itemSources : nil,
                         projectPath: projectFilter,
                         sessionID: conversation?.sessionID,
-                        agentID: conversation?.agentID
+                        agentID: conversation?.agentID,
+                        limit: limit + 1
                     )
-                    return (sessions, items, conversationFilter != nil && conversation == nil)
+                    let truncated = items.count > limit
+                    if truncated { items.removeLast() }
+                    let counts = LibraryCounts(
+                        all: try store.count(),
+                        clipboard: try store.count(sources: [.clipboard]),
+                        agents: try store.count(sources: [.claude, .codex])
+                    )
+                    return (sessions, items, conversationFilter != nil && conversation == nil, truncated, counts)
                 }.value
                 guard let self, !Task.isCancelled, generation == self.reloadGeneration else { return }
                 self.sessions = result.0
@@ -183,6 +241,8 @@ final class AppModel: ObservableObject {
                     return
                 }
                 self.items = result.1
+                self.resultsTruncated = result.3
+                self.itemCounts = result.4
                 if let selectedItemID, !result.1.contains(where: { $0.id == selectedItemID }) {
                     self.selectedItemID = result.1.first?.id
                 } else if selectedItemID == nil {
@@ -192,9 +252,44 @@ final class AppModel: ObservableObject {
                 return
             } catch {
                 guard let self, generation == self.reloadGeneration else { return }
-                self.errorMessage = error.localizedDescription
+                self.showPassiveStatus(error.localizedDescription)
             }
         }
+    }
+
+    func loadMore() {
+        resultLimit += 300
+        reload(refreshSessions: false)
+    }
+
+    func resetFilters() {
+        query = ""
+        sourceFilter = .all
+        projectFilter = nil
+        conversationFilter = nil
+        resultLimit = 300
+        paletteNotice = nil
+        reload(refreshSessions: false)
+    }
+
+    func performNoticeAction(_ notice: PaletteNotice) {
+        switch notice.action {
+        case .showAll: resetFilters()
+        case .resumeCapture:
+            settings.captureEnabled = true
+            paletteNotice = nil
+            showPassiveStatus(String(localized: "Clipboard recording resumed"))
+        case nil:
+            paletteNotice = nil
+        }
+    }
+
+    func dismissPaletteNotice() {
+        paletteNotice = nil
+    }
+
+    func dismissAgentActivityNotice() {
+        agentActivityNotice = nil
     }
 
     func refreshIntegrationStatus() {
@@ -218,6 +313,13 @@ final class AppModel: ObservableObject {
 
     @discardableResult
     func paste(_ item: ClipItem, target: NSRunningApplication?) -> Bool {
+        guard let target, !target.isTerminated else {
+            let copied = copy(item)
+            if copied {
+                showPassiveStatus(String(localized: "The destination app is unavailable, so the item was copied instead."))
+            }
+            return copied
+        }
         guard pasteCoordinator.isAccessibilityTrusted else {
             accessibilityPermissionRequired = true
             _ = pasteCoordinator.requestAccessibilityPermission()
@@ -230,6 +332,12 @@ final class AppModel: ObservableObject {
             try store.markUsed(id: item.id)
             reload()
             accessibilityPermissionRequired = false
+            return true
+        } catch PasteCoordinator.PasteError.targetUnavailable {
+            clipboardMonitor.acknowledgeCurrentContents()
+            try? store.markUsed(id: item.id)
+            reload()
+            showPassiveStatus(String(localized: "The destination app is unavailable, so the item was copied instead."))
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -318,15 +426,24 @@ final class AppModel: ObservableObject {
                 format: String(localized: "integration.test.sent", defaultValue: "%@ test event sent. Waiting for DuckClip…"),
                 provider.displayName
             )
+            let startedAt = Date()
             Task { [weak self] in
-                try? await Task.sleep(for: .milliseconds(700))
-                self?.reloadProviderHealth()
-                if self?.providerHealth[provider]?.lastEventKind == .sessionStarted {
-                    self?.integrationTestStatus = String(
-                        format: String(localized: "integration.test.delivered", defaultValue: "%@ hook is delivering events."),
-                        provider.displayName
-                    )
+                for _ in 0..<20 {
+                    try? await Task.sleep(for: .milliseconds(250))
+                    guard let self else { return }
+                    self.reloadProviderHealth()
+                    if let date = self.providerHealth[provider]?.lastEventAt, date >= startedAt {
+                        self.integrationTestStatus = String(
+                            format: String(localized: "integration.test.delivered", defaultValue: "%@ hook is delivering events."),
+                            provider.displayName
+                        )
+                        return
+                    }
                 }
+                self?.integrationTestStatus = String(
+                    format: String(localized: "integration.test.timeout", defaultValue: "%@ test event was not received. Reinstall the integration and try again."),
+                    provider.displayName
+                )
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -385,8 +502,11 @@ final class AppModel: ObservableObject {
             settings.notificationsEnabled = false
             return
         }
+        guard !notificationRequestInFlight else { return }
+        notificationRequestInFlight = true
         Task { [weak self] in
             guard let self else { return }
+            defer { notificationRequestInFlight = false }
             let current = await notifications.authorizationStatus()
             let granted: Bool
             if current == .notDetermined {
@@ -396,7 +516,34 @@ final class AppModel: ObservableObject {
             }
             notificationAuthorizationStatus = await notifications.authorizationStatus()
             settings.notificationsEnabled = granted
+            if !granted {
+                showPassiveStatus(String(localized: "Notifications are blocked by macOS."))
+            }
         }
+    }
+
+    func sendTestNotification(kind: AgentEventKind) {
+        let event = AgentEvent(
+            provider: .codex,
+            kind: kind,
+            sessionID: "duckclip-notification-test",
+            agentID: nil,
+            turnID: nil,
+            transcriptPath: nil,
+            eventID: UUID().uuidString,
+            projectPath: nil,
+            response: kind == .responseCompleted ? String(localized: "This is a DuckClip notification test.") : nil,
+            title: notificationTitle(for: kind),
+            message: notificationMessage(for: kind),
+            receivedAt: Date()
+        )
+        notifications.post(
+            event: event,
+            itemID: nil,
+            enabled: settings.notificationsEnabled,
+            previewMode: settings.notificationPreviewMode
+        )
+        showPassiveStatus(String(localized: "Test notification sent"))
     }
 
     func refreshNotificationAuthorization() {
@@ -440,12 +587,73 @@ final class AppModel: ObservableObject {
         accessibilityPermissionRequired = false
     }
 
+    func showPassiveStatus(_ message: String) {
+        passiveStatusTask?.cancel()
+        passiveStatusMessage = message
+        passiveStatusTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            self?.passiveStatusMessage = nil
+        }
+    }
+
     private func storeItem(_ item: ClipItem) {
         do {
-            _ = try store.insert(item)
+            let inserted = try store.insert(item)
+            if inserted {
+                let hiddenByFilter = sourceFilter == .agents
+                    || projectFilter != nil
+                    || conversationFilter != nil
+                    || !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                paletteNotice = PaletteNotice(
+                    message: hiddenByFilter
+                        ? String(localized: "Captured a clipboard item, but it is hidden by the current filter.")
+                        : captureDescription(for: item),
+                    systemImage: item.kind == .image ? "photo.fill" : "checkmark.circle.fill",
+                    action: hiddenByFilter ? .showAll : nil
+                )
+            } else {
+                paletteNotice = PaletteNotice(
+                    message: String(localized: "An identical recent item was moved to the top."),
+                    systemImage: "arrow.up.circle",
+                    action: nil
+                )
+            }
             reload()
         } catch {
-            errorMessage = error.localizedDescription
+            showPassiveStatus(error.localizedDescription)
+        }
+    }
+
+    private func handleClipboardStatus(_ status: ClipboardCaptureStatus) {
+        switch status {
+        case .paused:
+            paletteNotice = PaletteNotice(
+                message: String(localized: "Clipboard recording is paused."),
+                systemImage: "pause.circle.fill",
+                action: .resumeCapture
+            )
+        case .protectedContent:
+            paletteNotice = PaletteNotice(
+                message: String(localized: "Protected or temporary clipboard content was not recorded."),
+                systemImage: "hand.raised.fill",
+                action: nil
+            )
+        case .excludedApplication(let bundleID):
+            let name = bundleID.flatMap(applicationName) ?? String(localized: "an excluded application")
+            paletteNotice = PaletteNotice(
+                message: String(format: String(localized: "Clipboard content from %@ was not recorded."), name),
+                systemImage: "eye.slash.fill",
+                action: nil
+            )
+        case .unsupportedContent:
+            paletteNotice = PaletteNotice(
+                message: String(localized: "This clipboard format is not supported yet."),
+                systemImage: "questionmark.square.dashed",
+                action: nil
+            )
+        case .imageStorageFailed(let message):
+            showPassiveStatus(String(format: String(localized: "The image could not be saved: %@"), message))
         }
     }
 
@@ -471,12 +679,24 @@ final class AppModel: ObservableObject {
 
         let enabled: Bool
         switch event.kind {
-        case .responseCompleted, .inputRequired:
+        case .responseCompleted:
             enabled = settings.notificationsEnabled && settings.completionNotifications
-        case .approvalRequired, .failed:
+        case .inputRequired:
+            enabled = settings.notificationsEnabled && settings.inputNotifications
+        case .approvalRequired:
             enabled = settings.notificationsEnabled && settings.approvalNotifications
+        case .failed:
+            enabled = settings.notificationsEnabled && settings.failureNotifications
         case .sessionStarted, .ignored:
             enabled = false
+        }
+        if event.kind == .inputRequired || event.kind == .approvalRequired || event.kind == .failed {
+            agentActivityNotice = AgentActivityNotice(
+                provider: event.provider,
+                kind: event.kind,
+                title: event.title,
+                message: event.message
+            )
         }
         notifications.post(
             event: event,
@@ -519,6 +739,42 @@ final class AppModel: ObservableObject {
             orphanedPaths.forEach { blobStore.deleteIfPresent(path: $0) }
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func captureDescription(for item: ClipItem) -> String {
+        switch item.kind {
+        case .image: String(localized: "Image captured")
+        case .file: String(localized: "Files captured")
+        case .url: String(localized: "Link captured")
+        case .text, .agentResponse: String(localized: "Clipboard item captured")
+        }
+    }
+
+    private func applicationName(_ bundleID: String) -> String? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+        return Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? url.deletingPathExtension().lastPathComponent
+    }
+
+    private func notificationTitle(for kind: AgentEventKind) -> String {
+        switch kind {
+        case .responseCompleted: String(localized: "Codex response ready")
+        case .inputRequired: String(localized: "Codex is waiting for input")
+        case .approvalRequired: String(localized: "Codex needs approval")
+        case .failed: String(localized: "Codex stopped with an error")
+        case .sessionStarted, .ignored: "DuckClip"
+        }
+    }
+
+    private func notificationMessage(for kind: AgentEventKind) -> String {
+        switch kind {
+        case .responseCompleted: String(localized: "This is a DuckClip notification test.")
+        case .inputRequired: String(localized: "The agent is waiting for your response.")
+        case .approvalRequired: String(localized: "The agent needs permission to continue.")
+        case .failed: String(localized: "Open the agent session for details.")
+        case .sessionStarted, .ignored: String(localized: "Open DuckClip to view details.")
         }
     }
 }
