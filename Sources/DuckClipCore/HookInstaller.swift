@@ -503,6 +503,17 @@ public final class HookInstaller: @unchecked Sendable {
             .join("\n\n");
         }
 
+        function userText(messages) {
+          const message = [...messages].reverse().find((item) => item && item.role === "user");
+          if (!message) return "";
+          if (typeof message.content === "string") return message.content;
+          if (!Array.isArray(message.content)) return "";
+          return message.content
+            .filter((part) => part && (part.type === "text" || part.type === "input_text") && typeof part.text === "string")
+            .map((part) => part.text)
+            .join("\n\n");
+        }
+
         export default function duckClipExtension(pi) {
           pi.on("session_start", async (_event, ctx) => {
             await sendToDuckClip("session-start", {
@@ -522,6 +533,7 @@ public final class HookInstaller: @unchecked Sendable {
               transcript_path: ctx.sessionManager.getSessionFile(),
               cwd: ctx.cwd,
               response: assistantText(event.messages),
+              user_prompt: userText(event.messages),
               model: ctx.model?.id,
               model_provider: ctx.model?.provider
             });
@@ -576,20 +588,32 @@ public final class HookInstaller: @unchecked Sendable {
           return { text, id: entry.info?.id, agent: entry.info?.agent }
         }
 
+        function lastUserText(messages) {
+          const list = Array.isArray(messages) ? messages : []
+          const entry = [...list].reverse().find((item) => item?.info?.role === "user")
+          if (!entry) return ""
+          return (entry.parts || [])
+            .filter((part) => part?.type === "text" && typeof part.text === "string")
+            .map((part) => part.text)
+            .join("\n\n")
+        }
+
         export const DuckClip = async ({ client, directory }) => ({
           event: async ({ event }) => {
             const id = sessionID(event)
             if (event.type === "session.idle" && id) {
               try {
                 const result = await client.session.messages({ path: { id } })
-                const response = lastAssistant(result?.data || result)
+                const messages = result?.data || result
+                const response = lastAssistant(messages)
                 await sendToDuckClip("response-completed", {
                   hook_event_name: "response-completed",
                   session_id: id,
                   turn_id: response?.id,
                   agent_id: response?.agent,
                   cwd: directory,
-                  response: response?.text || ""
+                  response: response?.text || "",
+                  user_prompt: lastUserText(messages)
                 })
               } catch (_) {
                 await sendToDuckClip("response-completed", {

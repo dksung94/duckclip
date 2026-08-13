@@ -49,6 +49,7 @@ public final class SQLiteStore: @unchecked Sendable {
             kind TEXT NOT NULL,
             source TEXT NOT NULL,
             text TEXT NOT NULL DEFAULT '',
+            user_prompt TEXT,
             content_hash TEXT NOT NULL,
             session_id TEXT,
             agent_id TEXT,
@@ -65,6 +66,7 @@ public final class SQLiteStore: @unchecked Sendable {
         """)
         try ensureColumn("agent_id", definition: "TEXT", in: "items")
         try ensureColumn("event_id", definition: "TEXT", in: "items")
+        try ensureColumn("user_prompt", definition: "TEXT", in: "items")
         try execute("CREATE INDEX IF NOT EXISTS idx_items_recency ON items(pinned DESC, created_at DESC);")
         try execute("CREATE INDEX IF NOT EXISTS idx_items_source ON items(source, created_at DESC);")
         try execute("CREATE INDEX IF NOT EXISTS idx_items_session ON items(source, session_id, created_at DESC);")
@@ -120,10 +122,10 @@ public final class SQLiteStore: @unchecked Sendable {
 
             let sql = """
             INSERT OR IGNORE INTO items (
-                id, kind, source, text, content_hash, session_id, agent_id,
+                id, kind, source, text, user_prompt, content_hash, session_id, agent_id,
                 agent_turn_id, event_id, project_path, source_app_bundle_id,
                 payload_path, created_at, last_used_at, pinned, deleted_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);
             """
             let statement = try prepare(sql)
             defer { sqlite3_finalize(statement) }
@@ -131,19 +133,24 @@ public final class SQLiteStore: @unchecked Sendable {
             bind(item.kind.rawValue, at: 2, in: statement)
             bind(item.source.rawValue, at: 3, in: statement)
             bind(item.text, at: 4, in: statement)
-            bind(item.contentHash, at: 5, in: statement)
-            bind(item.sessionID, at: 6, in: statement)
-            bind(item.agentID, at: 7, in: statement)
-            bind(item.agentTurnID, at: 8, in: statement)
-            bind(item.eventID, at: 9, in: statement)
-            bind(item.projectPath, at: 10, in: statement)
-            bind(item.sourceAppBundleID, at: 11, in: statement)
-            bind(item.payloadPath, at: 12, in: statement)
-            sqlite3_bind_double(statement, 13, item.createdAt.timeIntervalSince1970)
-            bind(item.lastUsedAt?.timeIntervalSince1970, at: 14, in: statement)
-            sqlite3_bind_int(statement, 15, item.isPinned ? 1 : 0)
+            bind(item.userPrompt, at: 5, in: statement)
+            bind(item.contentHash, at: 6, in: statement)
+            bind(item.sessionID, at: 7, in: statement)
+            bind(item.agentID, at: 8, in: statement)
+            bind(item.agentTurnID, at: 9, in: statement)
+            bind(item.eventID, at: 10, in: statement)
+            bind(item.projectPath, at: 11, in: statement)
+            bind(item.sourceAppBundleID, at: 12, in: statement)
+            bind(item.payloadPath, at: 13, in: statement)
+            sqlite3_bind_double(statement, 14, item.createdAt.timeIntervalSince1970)
+            bind(item.lastUsedAt?.timeIntervalSince1970, at: 15, in: statement)
+            sqlite3_bind_int(statement, 16, item.isPinned ? 1 : 0)
             try stepDone(statement)
-            return sqlite3_changes(database) > 0
+            let inserted = sqlite3_changes(database) > 0
+            if !inserted, item.source.isAgent, let userPrompt = item.userPrompt {
+                _ = try backfillUserPrompt(userPrompt, for: item)
+            }
+            return inserted
         }
     }
 
@@ -195,7 +202,7 @@ public final class SQLiteStore: @unchecked Sendable {
                 ? "i.pinned DESC, COALESCE(i.last_used_at, i.created_at) DESC"
                 : "i.pinned DESC, bm25(items_fts) ASC, COALESCE(i.last_used_at, i.created_at) DESC"
             let sql = """
-            SELECT i.id, i.kind, i.source, i.text, i.content_hash,
+            SELECT i.id, i.kind, i.source, i.text, i.user_prompt, i.content_hash,
                    i.session_id, i.agent_id, i.agent_turn_id, i.event_id,
                    i.project_path, i.source_app_bundle_id, i.payload_path,
                    i.created_at, i.last_used_at, i.pinned
@@ -392,7 +399,7 @@ public final class SQLiteStore: @unchecked Sendable {
     public func item(id: String) throws -> ClipItem? {
         try withLock {
             let statement = try prepare("""
-                SELECT id, kind, source, text, content_hash,
+                SELECT id, kind, source, text, user_prompt, content_hash,
                        session_id, agent_id, agent_turn_id, event_id,
                        project_path, source_app_bundle_id, payload_path,
                        created_at, last_used_at, pinned
@@ -423,6 +430,43 @@ public final class SQLiteStore: @unchecked Sendable {
         sqlite3_bind_double(statement, 4, threshold)
         try stepDone(statement)
         return sqlite3_changes(database) > 0
+    }
+
+    @discardableResult
+    public func backfillUserPrompt(_ prompt: String, for item: ClipItem) throws -> Bool {
+        try withLock {
+            let sql: String
+            let bindings: [Binding]
+            if let eventID = item.eventID {
+                sql = """
+                UPDATE items SET user_prompt = ?
+                WHERE source = ? AND event_id = ?
+                  AND (user_prompt IS NULL OR user_prompt = '');
+                """
+                bindings = [.text(prompt), .text(item.source.rawValue), .text(eventID)]
+            } else if let turnID = item.agentTurnID {
+                sql = """
+                UPDATE items SET user_prompt = ?
+                WHERE source = ? AND session_id IS ? AND agent_turn_id = ?
+                  AND (user_prompt IS NULL OR user_prompt = '');
+                """
+                bindings = [
+                    .text(prompt),
+                    .text(item.source.rawValue),
+                    item.sessionID.map(Binding.text) ?? .null,
+                    .text(turnID)
+                ]
+            } else {
+                return false
+            }
+            let statement = try prepare(sql)
+            defer { sqlite3_finalize(statement) }
+            for (offset, binding) in bindings.enumerated() {
+                apply(binding, at: Int32(offset + 1), in: statement)
+            }
+            try stepDone(statement)
+            return sqlite3_changes(database) > 0
+        }
     }
 
     private func update(_ sql: String, _ bindings: [Binding]) throws {
@@ -550,17 +594,18 @@ public final class SQLiteStore: @unchecked Sendable {
             kind: ItemKind(rawValue: text(statement, 1) ?? "text") ?? .text,
             source: ItemSource(rawValue: text(statement, 2) ?? "clipboard") ?? .clipboard,
             text: text(statement, 3) ?? "",
-            contentHash: text(statement, 4) ?? "",
-            sessionID: text(statement, 5),
-            agentID: text(statement, 6),
-            agentTurnID: text(statement, 7),
-            eventID: text(statement, 8),
-            projectPath: text(statement, 9),
-            sourceAppBundleID: text(statement, 10),
-            payloadPath: text(statement, 11),
-            createdAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 12)),
-            lastUsedAt: sqlite3_column_type(statement, 13) == SQLITE_NULL ? nil : Date(timeIntervalSince1970: sqlite3_column_double(statement, 13)),
-            isPinned: sqlite3_column_int(statement, 14) != 0
+            userPrompt: text(statement, 4),
+            contentHash: text(statement, 5) ?? "",
+            sessionID: text(statement, 6),
+            agentID: text(statement, 7),
+            agentTurnID: text(statement, 8),
+            eventID: text(statement, 9),
+            projectPath: text(statement, 10),
+            sourceAppBundleID: text(statement, 11),
+            payloadPath: text(statement, 12),
+            createdAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 13)),
+            lastUsedAt: sqlite3_column_type(statement, 14) == SQLITE_NULL ? nil : Date(timeIntervalSince1970: sqlite3_column_double(statement, 14)),
+            isPinned: sqlite3_column_int(statement, 15) != 0
         )
     }
 

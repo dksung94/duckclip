@@ -43,6 +43,7 @@ public struct ClipItem: Identifiable, Hashable, Codable, Sendable {
     public var kind: ItemKind
     public var source: ItemSource
     public var text: String
+    public var userPrompt: String?
     public var contentHash: String
     public var sessionID: String?
     public var agentID: String?
@@ -60,6 +61,7 @@ public struct ClipItem: Identifiable, Hashable, Codable, Sendable {
         kind: ItemKind,
         source: ItemSource,
         text: String,
+        userPrompt: String? = nil,
         contentHash: String,
         sessionID: String? = nil,
         agentID: String? = nil,
@@ -76,6 +78,7 @@ public struct ClipItem: Identifiable, Hashable, Codable, Sendable {
         self.kind = kind
         self.source = source
         self.text = text
+        self.userPrompt = userPrompt
         self.contentHash = contentHash
         self.sessionID = sessionID
         self.agentID = agentID
@@ -90,14 +93,15 @@ public struct ClipItem: Identifiable, Hashable, Codable, Sendable {
     }
 
     public var title: String {
-        let first = text
+        let titleText = kind == .agentResponse ? userPrompt ?? text : text
+        let first = titleText
             .split(whereSeparator: \.isNewline)
             .first
             .map(String.init)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !first.isEmpty {
             let displayTitle: String
-            if kind == .agentResponse {
+            if kind == .agentResponse, userPrompt == nil {
                 displayTitle = first.drop(while: { $0 == "#" || $0.isWhitespace }).description
             } else {
                 displayTitle = first

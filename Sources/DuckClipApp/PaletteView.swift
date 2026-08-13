@@ -427,6 +427,10 @@ struct PaletteView: View {
                     URLPreview(item: item)
                 case .agentResponse:
                     VStack(spacing: 10) {
+                        if let prompt = item.userPrompt {
+                            agentQuestion(prompt)
+                            Divider()
+                        }
                         ScrollView {
                             MarkdownPreview(markdown: item.text)
                                 .padding(.trailing, 8)
@@ -454,6 +458,23 @@ struct PaletteView: View {
                 systemImage: "cursorarrow.click"
             )
         }
+    }
+
+    private func agentQuestion(_ prompt: String) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label("You asked", systemImage: "person.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ScrollView {
+                Text(prompt)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(maxHeight: 140)
+        }
+        .padding(10)
+        .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 9))
+        .accessibilityElement(children: .contain)
     }
 
     private func agentReplyComposer(for item: ClipItem) -> some View {

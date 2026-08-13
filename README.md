@@ -38,6 +38,7 @@ Use the compact Quick Paste window when you want something recent. Open the full
 ## What's new in 0.2
 
 - Write a follow-up beneath any collected agent response and send it back to the session that is still running.
+- See the user question that led to each collected response, including existing Codex and Claude history after a one-time local backfill.
 - Reach the exact local tmux pane even when it is hidden behind another pane, plus cmux, Terminal, and iTerm sessions.
 - Press `Return` while the follow-up field is focused to send the reply instead of triggering the clipboard action.
 - Keep a Rectangle-managed full-screen or half-screen window size while moving between Clipboard and Agents.
@@ -75,7 +76,7 @@ Press `⇧⌘V` when you need the complete DuckClip library.
 - Preview URLs and copied files before using them.
 - Copy an item again or paste it back into the app you came from.
 
-The clipboard view uses a simple list and preview. The Agents view uses three clear steps: **agent → conversation → response**. Agent responses preserve Markdown headings, paragraphs, and lists.
+The clipboard view uses a simple list and preview. The Agents view uses three clear steps: **agent → conversation → response**. Each response can show the user question that prompted it, and agent answers preserve Markdown headings, paragraphs, and lists.
 
 ## Why DuckClip?
 

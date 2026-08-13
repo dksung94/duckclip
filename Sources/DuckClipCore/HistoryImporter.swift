@@ -28,6 +28,31 @@ public final class HistoryImporter: @unchecked Sendable {
         return summary
     }
 
+    @discardableResult
+    public func backfillExistingUserPrompts() throws -> Int {
+        var updated = 0
+        for (provider, relativePath) in [
+            (ItemSource.codex, ".codex/sessions"),
+            (ItemSource.claude, ".claude/projects")
+        ] {
+            let root = home.appendingPathComponent(relativePath, isDirectory: true)
+            guard fileManager.fileExists(atPath: root.path), let enumerator = fileManager.enumerator(
+                at: root,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+            for case let file as URL in enumerator where file.pathExtension == "jsonl" {
+                guard let data = try? Data(contentsOf: file, options: .mappedIfSafe) else { continue }
+                let items = provider == .codex ? Self.parseCodex(data: data) : Self.parseClaude(data: data)
+                for item in items {
+                    guard let prompt = item.userPrompt else { continue }
+                    if try store.backfillUserPrompt(prompt, for: item) { updated += 1 }
+                }
+            }
+        }
+        return updated
+    }
+
     private func importFiles(at root: URL, provider: ItemSource, summary: inout ImportSummary) throws {
         guard fileManager.fileExists(atPath: root.path), let enumerator = fileManager.enumerator(
             at: root,
@@ -57,6 +82,7 @@ public final class HistoryImporter: @unchecked Sendable {
         var sessionID: String?
         var cwd: String?
         var activeTurnID: String?
+        var activeUserPrompt: String?
         var results: [ClipItem] = []
 
         for object in jsonLines(data) {
@@ -74,6 +100,10 @@ public final class HistoryImporter: @unchecked Sendable {
             }
             if type == "event_msg", payload["type"] as? String == "task_started" {
                 activeTurnID = payload["turn_id"] as? String ?? activeTurnID
+                continue
+            }
+            if type == "event_msg", payload["type"] as? String == "user_message" {
+                activeUserPrompt = sanitizedUserPrompt(payload["message"] as? String)
                 continue
             }
             guard
@@ -96,6 +126,7 @@ public final class HistoryImporter: @unchecked Sendable {
                 kind: .agentResponse,
                 source: .codex,
                 text: text,
+                userPrompt: activeUserPrompt,
                 contentHash: ContentHasher.sha256(text),
                 sessionID: sessionID,
                 agentTurnID: messageID ?? activeTurnID,
@@ -109,8 +140,18 @@ public final class HistoryImporter: @unchecked Sendable {
     public static func parseClaude(data: Data) -> [ClipItem] {
         var byMessageID: [String: ClipItem] = [:]
         var anonymous: [ClipItem] = []
+        var activeUserPrompt: String?
 
         for object in jsonLines(data) {
+            if object["type"] as? String == "user" {
+                guard object["isSidechain"] as? Bool != true,
+                      object["isMeta"] as? Bool != true
+                else { continue }
+                let message = object["message"] as? [String: Any] ?? [:]
+                guard message["role"] as? String == "user" else { continue }
+                activeUserPrompt = sanitizedUserPrompt(textContent(message["content"]))
+                continue
+            }
             guard object["type"] as? String == "assistant" else { continue }
             if object["isSidechain"] as? Bool == true { continue }
             let message = object["message"] as? [String: Any] ?? [:]
@@ -130,6 +171,7 @@ public final class HistoryImporter: @unchecked Sendable {
                 kind: .agentResponse,
                 source: .claude,
                 text: text,
+                userPrompt: activeUserPrompt,
                 contentHash: ContentHasher.sha256(text),
                 sessionID: sessionID,
                 agentTurnID: messageID,
@@ -156,6 +198,29 @@ public final class HistoryImporter: @unchecked Sendable {
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return fractional.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+    }
+
+    private static func textContent(_ value: Any?) -> String? {
+        if let value = value as? String { return value }
+        guard let blocks = value as? [[String: Any]] else { return nil }
+        let text = blocks.compactMap { block -> String? in
+            guard ["text", "input_text"].contains(block["type"] as? String ?? "") else { return nil }
+            return block["text"] as? String
+        }.joined(separator: "\n\n")
+        return text.isEmpty ? nil : text
+    }
+
+    private static func sanitizedUserPrompt(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let prompt = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return nil }
+        let normalized = prompt.lowercased()
+        let metadataPrefixes = [
+            "<local-command-", "<command-name>", "<system-reminder>",
+            "<environment_context>", "<developer", "<instructions>"
+        ]
+        guard !metadataPrefixes.contains(where: normalized.hasPrefix) else { return nil }
+        return String(prompt.prefix(50_000))
     }
 
     private static func deduplicated(_ items: [ClipItem]) -> [ClipItem] {

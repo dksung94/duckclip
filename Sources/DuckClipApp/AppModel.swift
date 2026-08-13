@@ -164,6 +164,7 @@ final class AppModel: ObservableObject {
             orphanedPaths.forEach { blobStore.deleteIfPresent(path: $0) }
         }
         purgeExpiredItems()
+        backfillAgentQuestionsIfNeeded()
     }
 
     var projects: [String] {
@@ -524,6 +525,24 @@ final class AppModel: ObservableObject {
             } catch {
                 self?.isImporting = false
                 self?.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func backfillAgentQuestionsIfNeeded() {
+        let defaults = UserDefaults.standard
+        let key = "didBackfillAgentQuestionsV2"
+        guard !defaults.bool(forKey: key) else { return }
+        let importer = historyImporter
+        Task { [weak self] in
+            do {
+                let updated = try await Task.detached(priority: .utility) {
+                    try importer.backfillExistingUserPrompts()
+                }.value
+                defaults.set(true, forKey: key)
+                if updated > 0 { self?.reload() }
+            } catch {
+                self?.showPassiveStatus(error.localizedDescription)
             }
         }
     }

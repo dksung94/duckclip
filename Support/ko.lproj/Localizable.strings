@@ -224,6 +224,7 @@
 "Select a conversation" = "대화를 선택하세요";
 "%lld responses" = "응답 %lld개";
 "Reply to this session" = "이 세션에 답장";
+"You asked" = "내 질문";
 "Write a follow-up…" = "후속 요청 작성…";
 "Send to Session" = "세션으로 보내기";
 "Sends directly to the terminal tab that owns this live session." = "이 실행 중인 세션을 소유한 터미널 탭으로 바로 전송합니다.";

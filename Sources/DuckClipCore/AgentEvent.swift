@@ -19,6 +19,7 @@ public struct AgentEvent: Sendable {
     public let eventID: String
     public let projectPath: String?
     public let response: String?
+    public let userPrompt: String?
     public let title: String
     public let message: String
     public let receivedAt: Date
@@ -33,6 +34,7 @@ public struct AgentEvent: Sendable {
         eventID: String,
         projectPath: String?,
         response: String?,
+        userPrompt: String? = nil,
         title: String,
         message: String,
         receivedAt: Date
@@ -46,6 +48,7 @@ public struct AgentEvent: Sendable {
         self.eventID = eventID
         self.projectPath = projectPath
         self.response = response
+        self.userPrompt = userPrompt
         self.title = title
         self.message = message
         self.receivedAt = receivedAt
@@ -57,6 +60,7 @@ public struct AgentEvent: Sendable {
             kind: .agentResponse,
             source: provider,
             text: response,
+            userPrompt: userPrompt,
             contentHash: ContentHasher.sha256(response),
             sessionID: sessionID,
             agentID: agentID,
@@ -97,6 +101,12 @@ public enum AgentEventParser {
             "last_assistant_message", "lastAssistantMessage", "prompt_response", "promptResponse", "response", "text"
         )
         let response = directResponse ?? transcriptPath.flatMap(lastAssistantResponse(at:))
+        let directUserPrompt = string(
+            payload,
+            "user_prompt", "userPrompt", "prompt", "question", "request"
+        )
+        let userPrompt = sanitizedUserPrompt(directUserPrompt)
+            ?? transcriptPath.flatMap { lastUserPrompt(at: $0, provider: provider) }
         let notificationType = string(payload, "notification_type", "notificationType")
         let toolName = string(payload, "tool_name", "toolName")
         let normalizedEvent = normalized(eventName)
@@ -215,6 +225,7 @@ public enum AgentEventParser {
             eventID: eventID,
             projectPath: projectPath,
             response: response,
+            userPrompt: userPrompt,
             title: title,
             message: String(message.prefix(220)),
             receivedAt: receivedAt
@@ -257,6 +268,64 @@ public enum AgentEventParser {
         return nil
     }
 
+    private static func lastUserPrompt(at path: String, provider: ItemSource) -> String? {
+        let url = URL(fileURLWithPath: path)
+        guard
+            let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+            let size = attributes[.size] as? NSNumber,
+            size.int64Value <= 50 * 1_024 * 1_024,
+            let data = try? Data(contentsOf: url)
+        else { return nil }
+
+        if let object = try? JSONSerialization.jsonObject(with: data) {
+            return userPrompts(in: object, provider: provider).last
+        }
+
+        let lines = String(decoding: data, as: UTF8.self).split(separator: "\n", omittingEmptySubsequences: true)
+        for line in lines.reversed() {
+            guard
+                let lineData = String(line).data(using: .utf8),
+                let object = try? JSONSerialization.jsonObject(with: lineData),
+                let prompt = userPrompts(in: object, provider: provider).last
+            else { continue }
+            return prompt
+        }
+        return nil
+    }
+
+    private static func userPrompts(in value: Any, provider: ItemSource) -> [String] {
+        if let array = value as? [Any] {
+            return array.flatMap { userPrompts(in: $0, provider: provider) }
+        }
+        guard let object = value as? [String: Any] else { return [] }
+
+        if provider == .codex,
+           normalized(string(object, "type") ?? "") == "eventmsg",
+           let payload = object["payload"] as? [String: Any],
+           normalized(string(payload, "type") ?? "") == "usermessage",
+           let prompt = sanitizedUserPrompt(string(payload, "message")) {
+            return [prompt]
+        }
+
+        if provider == .claude,
+           normalized(string(object, "type") ?? "") == "user",
+           object["isMeta"] as? Bool != true,
+           object["isSidechain"] as? Bool != true,
+           let message = object["message"] as? [String: Any],
+           normalized(string(message, "role") ?? "") == "user",
+           let prompt = sanitizedUserPrompt(textContent(in: message)) {
+            return [prompt]
+        }
+
+        guard provider != .codex, provider != .claude else { return [] }
+        let role = normalized(string(object, "role", "author", "speaker") ?? "")
+        if ["user", "human"].contains(role),
+           let prompt = sanitizedUserPrompt(textContent(in: object)) {
+            return [prompt]
+        }
+        return object.values.flatMap { userPrompts(in: $0, provider: provider) }
+    }
+
     private static func assistantTexts(in value: Any) -> [String] {
         if let array = value as? [Any] {
             return array.flatMap(assistantTexts(in:))
@@ -288,6 +357,19 @@ public enum AgentEventParser {
             }
         }
         return nil
+    }
+
+    private static func sanitizedUserPrompt(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let prompt = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return nil }
+        let normalized = prompt.lowercased()
+        let metadataPrefixes = [
+            "<local-command-", "<command-name>", "<system-reminder>",
+            "<environment_context>", "<developer", "<instructions>"
+        ]
+        guard !metadataPrefixes.contains(where: normalized.hasPrefix) else { return nil }
+        return String(prompt.prefix(50_000))
     }
 }
 

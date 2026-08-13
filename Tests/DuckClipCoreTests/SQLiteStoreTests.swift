@@ -67,4 +67,31 @@ import Testing
         #expect(try !store.insert(item))
         #expect(try store.count() == 1)
     }
+
+    @Test func backfillsQuestionOntoAnExistingAgentResponse() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try SQLiteStore(url: directory.appendingPathComponent("test.sqlite3"))
+        let original = ClipItem(
+            kind: .agentResponse,
+            source: .codex,
+            text: "Fixed it.",
+            contentHash: "answer-hash",
+            sessionID: "session-1",
+            agentTurnID: "turn-1"
+        )
+        #expect(try store.insert(original))
+
+        let enriched = ClipItem(
+            kind: .agentResponse,
+            source: .codex,
+            text: "Fixed it.",
+            userPrompt: "Can you fix the layout?",
+            contentHash: "answer-hash",
+            sessionID: "session-1",
+            agentTurnID: "turn-1"
+        )
+        #expect(try !store.insert(enriched))
+        #expect(try store.item(id: original.id)?.userPrompt == "Can you fix the layout?")
+    }
 }

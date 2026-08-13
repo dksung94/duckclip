@@ -110,6 +110,8 @@ import Testing
                 "transcriptPath": transcript.path
             ]
         ])
-        #expect(try AgentEventParser.parse(envelope: data).clipItem?.text == "Copilot completed.")
+        let event = try AgentEventParser.parse(envelope: data)
+        #expect(event.clipItem?.text == "Copilot completed.")
+        #expect(event.clipItem?.userPrompt == "fix it")
     }
 }
