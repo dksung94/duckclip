@@ -2,45 +2,40 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class PalettePanelController {
+final class QuickPastePanelState: ObservableObject {
+    @Published var targetName: String?
+    @Published var refreshToken = UUID()
+}
+
+@MainActor
+final class QuickPastePanelController {
     private let model: AppModel
+    private let state = QuickPastePanelState()
     private let panel: NSPanel
     private var targetApplication: NSRunningApplication?
     private var lastExternalApplication: NSRunningApplication?
     private var activationObserver: NSObjectProtocol?
-    private var needsInitialPosition = true
 
     init(model: AppModel) {
         self.model = model
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 1100, height: 650),
-            styleMask: [.titled, .fullSizeContentView, .resizable, .closable],
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 510),
+            styleMask: [.titled, .fullSizeContentView, .closable],
             backing: .buffered,
             defer: false
         )
-        panel.title = "DuckClip"
+        panel.title = String(localized: "Quick Paste")
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.minSize = NSSize(width: 900, height: 480)
-        needsInitialPosition = !panel.setFrameUsingName("DuckClipPalette")
-        panel.setFrameAutosaveName("DuckClipPalette")
+        panel.isMovableByWindowBackground = true
 
-        panel.contentView = NSHostingView(rootView: PaletteView(
+        panel.contentView = NSHostingView(rootView: QuickPasteView(
             model: model,
-            onActivate: { [weak self] item in
-                guard let self else { return }
-                if self.model.settings.autoPaste {
-                    if self.model.paste(item, target: self.targetApplication) {
-                        self.panel.orderOut(nil)
-                    }
-                } else if self.model.copy(item) {
-                    self.panel.orderOut(nil)
-                }
-            },
+            state: state,
             onPaste: { [weak self] item in
                 guard let self else { return }
                 if self.model.paste(item, target: self.targetApplication) {
@@ -81,31 +76,26 @@ final class PalettePanelController {
         }
     }
 
-    func toggle(selecting itemID: String? = nil) {
-        if panel.isVisible && itemID == nil {
+    func toggle() {
+        if panel.isVisible {
             panel.orderOut(nil)
-            return
+        } else {
+            show()
         }
-        show(selecting: itemID)
     }
 
-    func show(selecting itemID: String? = nil) {
-        let duckBundleID = Bundle.main.bundleIdentifier
+    func show() {
+        let bundleID = Bundle.main.bundleIdentifier
         let frontmost = NSWorkspace.shared.frontmostApplication
         let currentExternal = frontmost.flatMap { app in
-            app.bundleIdentifier != duckBundleID && !app.isTerminated ? app : nil
+            app.bundleIdentifier != bundleID && !app.isTerminated ? app : nil
         }
         let fallback = lastExternalApplication.flatMap { !$0.isTerminated ? $0 : nil }
         targetApplication = currentExternal ?? fallback
-        model.pasteTargetName = targetApplication?.localizedName
-        model.refreshIntegrationStatus()
+        state.targetName = targetApplication?.localizedName
+        state.refreshToken = UUID()
         model.refreshAccessibilityPermission()
-        model.reload()
-        if let itemID { model.selectedItemID = itemID }
-        if needsInitialPosition {
-            positionOnActiveScreen()
-            needsInitialPosition = false
-        }
+        positionOnActiveScreen()
         NSApplication.shared.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
     }
@@ -119,7 +109,7 @@ final class PalettePanelController {
         }
         let origin = NSPoint(
             x: visibleFrame.midX - panel.frame.width / 2,
-            y: visibleFrame.midY - panel.frame.height / 2
+            y: visibleFrame.maxY - panel.frame.height - 72
         )
         panel.setFrameOrigin(origin)
     }

@@ -215,6 +215,31 @@
 "Copy response" = "응답 복사";
 "Open DuckClip" = "DuckClip 열기";
 
+/* Three-column agent navigator */
+"Conversations" = "대화";
+"No agents yet" = "아직 에이전트가 없습니다";
+"Agent conversations will appear here after an integration sends a response." = "연동된 에이전트가 응답을 보내면 여기에 대화가 표시됩니다.";
+"Select an agent" = "에이전트를 선택하세요";
+"Choose an agent to see its conversation history." = "대화 기록을 보려면 에이전트를 선택하세요.";
+"Select a conversation" = "대화를 선택하세요";
+"%lld responses" = "응답 %lld개";
+
+/* Quick Paste */
+"Quick Paste (%@)" = "빠른 붙여넣기 (%@)";
+"Quick Paste" = "빠른 붙여넣기";
+"The Quick Paste shortcut is unavailable" = "빠른 붙여넣기 단축키를 사용할 수 없음";
+"Quick Paste shortcut" = "빠른 붙여넣기 단축키";
+"Opens a compact list of the nine most recent clipboard items. Press ⌘1–⌘9 to paste immediately." = "최근 클립보드 9개를 간단한 목록으로 엽니다. ⌘1~⌘9를 누르면 즉시 붙여넣습니다.";
+"The Quick Paste shortcut is unavailable." = "빠른 붙여넣기 단축키를 사용할 수 없습니다.";
+"Search recent copies" = "최근 복사 기록 검색";
+"No matching copies" = "일치하는 복사 기록 없음";
+"Try a different search." = "다른 검색어를 입력해 보세요.";
+"⌘1–9 Paste" = "⌘1~9 붙여넣기";
+"Text" = "텍스트";
+"Image" = "이미지";
+"File" = "파일";
+"Agent response" = "에이전트 응답";
+
 "DuckClip could not start" = "DuckClip을 시작할 수 없음";
 "Retry" = "다시 시도";
 "Open Application Support" = "Application Support 열기";

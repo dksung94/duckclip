@@ -89,14 +89,55 @@ struct PaletteView: View {
                 Divider()
             }
             Divider()
+            paletteContent
+            Divider()
+            footer
+        }
+    }
+
+    @ViewBuilder
+    private var paletteContent: some View {
+        if model.sourceFilter == .agents {
+            agentWorkspace
+        } else {
             HSplitView {
                 itemList
                     .frame(minWidth: 330, idealWidth: 390)
                 preview
                     .frame(minWidth: 300)
             }
-            Divider()
-            footer
+        }
+    }
+
+    @ViewBuilder
+    private var agentWorkspace: some View {
+        if missingAgentIntegrations && model.filteredSessions.isEmpty {
+            ContentUnavailableView {
+                Label("Agent integrations are not installed", systemImage: "link.badge.plus")
+            } description: {
+                Text("Install the Claude and Codex hooks before DuckClip can collect new responses.")
+            } actions: {
+                Button("Install integrations") { model.installHooks() }
+            }
+        } else if model.filteredSessions.isEmpty {
+            ContentUnavailableView {
+                Label("No agents yet", systemImage: "sparkles")
+            } description: {
+                Text(hasActiveFilters ? "Try a broader search or reset the filters." : "Agent conversations will appear here after an integration sends a response.")
+            } actions: {
+                if hasActiveFilters {
+                    Button("Reset filters") { model.resetFilters() }
+                }
+            }
+        } else {
+            HSplitView {
+                agentList
+                    .frame(minWidth: 210, idealWidth: 235, maxWidth: 290)
+                conversationPane
+                    .frame(minWidth: 300, idealWidth: 350)
+                preview
+                    .frame(minWidth: 320)
+            }
         }
     }
 
@@ -184,14 +225,16 @@ struct PaletteView: View {
                     .labelsHidden()
                     .frame(maxWidth: 170)
 
-                    Picker("Agent or session", selection: $model.conversationFilter) {
-                        Text("All agents & sessions").tag(String?.none)
-                        ForEach(model.filteredSessions) { session in
-                            Text(conversationLabel(session)).tag(String?.some(session.id))
+                    if model.sourceFilter == .all {
+                        Picker("Agent or session", selection: $model.conversationFilter) {
+                            Text("All agents & sessions").tag(String?.none)
+                            ForEach(model.filteredSessions) { session in
+                                Text(conversationLabel(session)).tag(String?.some(session.id))
+                            }
                         }
+                        .labelsHidden()
+                        .frame(maxWidth: 210)
                     }
-                    .labelsHidden()
-                    .frame(maxWidth: 210)
                 }
                 Spacer(minLength: 0)
                 if hasActiveFilters {
@@ -201,6 +244,42 @@ struct PaletteView: View {
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 10)
+        }
+    }
+
+    private var agentList: some View {
+        VStack(spacing: 0) {
+            PaneHeader(title: "Agents", count: model.filteredSessions.count)
+            Divider()
+            List(selection: $model.conversationFilter) {
+                ForEach(model.filteredSessions) { session in
+                    AgentRow(session: session)
+                        .tag(session.id)
+                        .contentShape(Rectangle())
+                        .onTapGesture { model.conversationFilter = session.id }
+                }
+            }
+            .listStyle(.sidebar)
+        }
+    }
+
+    @ViewBuilder
+    private var conversationPane: some View {
+        VStack(spacing: 0) {
+            PaneHeader(
+                title: "Conversations",
+                count: model.conversationFilter == nil ? nil : model.items.count
+            )
+            Divider()
+            if model.conversationFilter == nil {
+                ContentUnavailableView {
+                    Label("Select an agent", systemImage: "sidebar.left")
+                } description: {
+                    Text("Choose an agent to see its conversation history.")
+                }
+            } else {
+                itemList
+            }
         }
     }
 
@@ -331,9 +410,7 @@ struct PaletteView: View {
                     URLPreview(item: item)
                 case .agentResponse:
                     ScrollView {
-                        Text(markdown: item.text)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                        MarkdownPreview(markdown: item.text)
                             .padding(.trailing, 8)
                     }
                 case .text:
@@ -348,7 +425,10 @@ struct PaletteView: View {
             }
             .padding(16)
         } else {
-            ContentUnavailableView("Select an item", systemImage: "cursorarrow.click")
+            ContentUnavailableView(
+                model.sourceFilter == .agents ? "Select a conversation" : "Select an item",
+                systemImage: "cursorarrow.click"
+            )
         }
     }
 
@@ -464,6 +544,77 @@ private struct OnboardingRow: View {
                 Text(detail).foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+private struct PaneHeader: View {
+    let title: LocalizedStringKey
+    let count: Int?
+
+    init(title: LocalizedStringKey, count: Int? = nil) {
+        self.title = title
+        self.count = count
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Text(title)
+                .font(.headline)
+            if let count {
+                Text("\(count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 38)
+        .background(.bar)
+    }
+}
+
+private struct AgentRow: View {
+    let session: AgentSessionSummary
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: session.provider == .codex ? "chevron.left.forwardslash.chevron.right" : "sparkles")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(session.provider == .codex ? .green : .orange)
+                .frame(width: 28, height: 28)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(session.provider.displayName)
+                    .font(.headline)
+                    .lineLimit(1)
+                Text(identityLabel)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                if let project = session.projectPath {
+                    Text(URL(fileURLWithPath: project).lastPathComponent)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                HStack(spacing: 4) {
+                    Text("\(session.itemCount) responses")
+                    Text("·")
+                    Text(session.lastSeenAt, style: .relative)
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var identityLabel: String {
+        let prefix = session.agentID == nil ? String(localized: "Session") : String(localized: "Agent")
+        return "\(prefix) \(session.identityID.prefix(10))"
     }
 }
 
@@ -718,15 +869,76 @@ private struct ImageMetadata {
     }
 }
 
+private struct MarkdownPreview: View {
+    let markdown: String
+
+    private var lines: [String] {
+        markdown.components(separatedBy: .newlines)
+    }
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: 7) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                MarkdownLine(line: line)
+            }
+        }
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
+private struct MarkdownLine: View {
+    let line: String
+
+    var body: some View {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            Color.clear.frame(height: 3)
+        } else if let heading = heading {
+            Text(inlineMarkdown: heading.text)
+                .font(heading.font)
+                .padding(.top, heading.level == 1 ? 4 : 1)
+        } else if let bullet = bulletText {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("•")
+                    .foregroundStyle(.secondary)
+                Text(inlineMarkdown: bullet)
+            }
+            .padding(.leading, 4)
+        } else {
+            Text(inlineMarkdown: line)
+        }
+    }
+
+    private var heading: (level: Int, text: String, font: Font)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let marker = trimmed.prefix(while: { $0 == "#" })
+        guard (1...3).contains(marker.count), trimmed.dropFirst(marker.count).first == " " else { return nil }
+        let text = trimmed.dropFirst(marker.count).trimmingCharacters(in: .whitespaces)
+        let font: Font = switch marker.count {
+        case 1: .title2.bold()
+        case 2: .title3.bold()
+        default: .headline
+        }
+        return (marker.count, text, font)
+    }
+
+    private var bulletText: String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") else { return nil }
+        return String(trimmed.dropFirst(2))
+    }
+}
+
 private extension Text {
-    init(markdown: String) {
+    init(inlineMarkdown: String) {
         if let attributed = try? AttributedString(
-            markdown: markdown,
-            options: .init(interpretedSyntax: .full)
+            markdown: inlineMarkdown,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         ) {
             self.init(attributed)
         } else {
-            self.init(markdown)
+            self.init(inlineMarkdown)
         }
     }
 }

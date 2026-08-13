@@ -71,6 +71,9 @@ final class AppModel: ObservableObject {
         didSet {
             guard conversationFilter != oldValue else { return }
             resultLimit = 300
+            if sourceFilter == .agents {
+                selectedItemID = nil
+            }
             reload(refreshSessions: false)
         }
     }
@@ -88,6 +91,7 @@ final class AppModel: ObservableObject {
     @Published var importStatus = ""
     @Published var isImporting = false
     @Published var shortcutRegistrationSucceeded = true
+    @Published var quickPasteShortcutRegistrationSucceeded = true
     @Published var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published var notificationRequestInFlight = false
     @Published var accessibilityPermissionRequired = false
@@ -178,6 +182,15 @@ final class AppModel: ObservableObject {
         return items.first { $0.id == selectedItemID }
     }
 
+    func recentClipboardItems(query: String, limit: Int = 9) -> [ClipItem] {
+        do {
+            return try store.search(query: query, source: .clipboard, limit: limit)
+        } catch {
+            showPassiveStatus(error.localizedDescription)
+            return []
+        }
+    }
+
     func moveSelection(by offset: Int, orderedIDs: [String]? = nil) {
         let ids = orderedIDs ?? items.map(\.id)
         guard !ids.isEmpty else { return }
@@ -244,8 +257,8 @@ final class AppModel: ObservableObject {
                 self.resultsTruncated = result.3
                 self.itemCounts = result.4
                 if let selectedItemID, !result.1.contains(where: { $0.id == selectedItemID }) {
-                    self.selectedItemID = result.1.first?.id
-                } else if selectedItemID == nil {
+                    self.selectedItemID = sourceFilter == .agents ? nil : result.1.first?.id
+                } else if selectedItemID == nil, sourceFilter != .agents {
                     self.selectedItemID = result.1.first?.id
                 }
             } catch is CancellationError {

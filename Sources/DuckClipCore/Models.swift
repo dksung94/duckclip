@@ -79,7 +79,15 @@ public struct ClipItem: Identifiable, Hashable, Codable, Sendable {
             .first
             .map(String.init)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !first.isEmpty { return String(first.prefix(120)) }
+        if !first.isEmpty {
+            let displayTitle: String
+            if kind == .agentResponse {
+                displayTitle = first.drop(while: { $0 == "#" || $0.isWhitespace }).description
+            } else {
+                displayTitle = first
+            }
+            return String(displayTitle.prefix(120))
+        }
         if let payloadPath { return URL(fileURLWithPath: payloadPath).lastPathComponent }
         return kind.rawValue.capitalized
     }

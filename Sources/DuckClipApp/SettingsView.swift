@@ -126,6 +126,20 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
                 }
+                LabeledContent("Quick Paste shortcut") {
+                    Text("⌃⌘V")
+                }
+                Text("Opens a compact list of the nine most recent clipboard items. Press ⌘1–⌘9 to paste immediately.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if !model.quickPasteShortcutRegistrationSucceeded {
+                    Label(
+                        "The Quick Paste shortcut is unavailable.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                }
             }
 
             Section {

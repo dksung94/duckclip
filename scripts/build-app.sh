@@ -19,6 +19,8 @@ cp "$binary_dir/DuckClip" "$macos_dir/DuckClip"
 cp "$binary_dir/duckclip-hook" "$macos_dir/duckclip-hook"
 cp "$repo_dir/Support/Info.plist" "$contents_dir/Info.plist"
 cp "$repo_dir/Support/ko.lproj/Localizable.strings" "$resources_dir/ko.lproj/Localizable.strings"
+cp "$repo_dir/Support/Assets/DuckClipMenuBar.png" "$resources_dir/DuckClipMenuBar.png"
+cp "$repo_dir/Support/Assets/DuckClipMenuBar@2x.png" "$resources_dir/DuckClipMenuBar@2x.png"
 chmod 755 "$macos_dir/DuckClip" "$macos_dir/duckclip-hook"
 
 if [[ -n "${CODE_SIGN_IDENTITY:-}" ]]; then

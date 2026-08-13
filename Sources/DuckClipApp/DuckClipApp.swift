@@ -26,7 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @Published private(set) var startupError: String?
 
     private var panelController: PalettePanelController?
+    private var quickPastePanelController: QuickPastePanelController?
     private let hotKey = HotKeyManager()
+    private let quickPasteHotKey = HotKeyManager(signature: "QDUK")
     private var cancellables: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -46,6 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func showPalette() {
         panelController?.show()
+    }
+
+    func showQuickPaste() {
+        quickPastePanelController?.show()
     }
 
     func retryStartup() {
@@ -68,12 +74,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             startupError = nil
             self.model = model
             let panelController = PalettePanelController(model: model)
+            let quickPastePanelController = QuickPastePanelController(model: model)
             self.panelController = panelController
+            self.quickPastePanelController = quickPastePanelController
             model.openPalette = { [weak panelController] itemID in
                 panelController?.show(selecting: itemID)
             }
             hotKey.onInvoke = { [weak panelController] in panelController?.toggle() }
+            quickPasteHotKey.onInvoke = { [weak quickPastePanelController] in quickPastePanelController?.toggle() }
             registerHotKey(model.settings.globalShortcut)
+            model.quickPasteShortcutRegistrationSucceeded = quickPasteHotKey.registerQuickPaste()
             cancellables.removeAll()
             model.settings.$globalShortcut
                 .dropFirst()
@@ -81,7 +91,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 .sink { [weak self] shortcut in self?.registerHotKey(shortcut) }
                 .store(in: &cancellables)
             model.start()
-            if !model.settings.hasCompletedOnboarding || CommandLine.arguments.contains("--show-palette") {
+            if CommandLine.arguments.contains("--show-quick-paste") {
+                Task { @MainActor [weak quickPastePanelController] in
+                    try? await Task.sleep(for: .milliseconds(250))
+                    quickPastePanelController?.show()
+                }
+            } else if !model.settings.hasCompletedOnboarding || CommandLine.arguments.contains("--show-palette") {
                 Task { @MainActor [weak panelController] in
                     try? await Task.sleep(for: .milliseconds(250))
                     panelController?.show()
@@ -90,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         } catch {
             model = nil
             panelController = nil
+            quickPastePanelController = nil
             startupError = error.localizedDescription
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
@@ -105,7 +121,11 @@ private struct MenuBarRoot: View {
 
     var body: some View {
         if let model = delegate.model {
-            MenuBarContent(model: model, showPalette: delegate.showPalette)
+            MenuBarContent(
+                model: model,
+                showPalette: delegate.showPalette,
+                showQuickPaste: delegate.showQuickPaste
+            )
         } else if let error = delegate.startupError {
             Text("DuckClip could not start")
             Text(error).font(.caption)
@@ -162,28 +182,54 @@ private struct CaptureStatusIcon: View {
     }
 
     var body: some View {
-        Image(systemName: !model.shortcutRegistrationSucceeded
-            ? "exclamationmark.triangle.fill"
-            : settings.captureEnabled ? "doc.on.clipboard.fill" : "pause.circle.fill")
+        Group {
+            if !model.shortcutRegistrationSucceeded || !model.quickPasteShortcutRegistrationSucceeded {
+                Image(systemName: "exclamationmark.triangle.fill")
+            } else if !settings.captureEnabled {
+                Image(systemName: "pause.circle.fill")
+            } else if let image = MenuBarDuck.image {
+                Image(nsImage: image)
+            } else {
+                Image(systemName: "bird.fill")
+            }
+        }
             .accessibilityLabel(settings.captureEnabled ? "DuckClip recording" : "DuckClip paused")
     }
+}
+
+private enum MenuBarDuck {
+    static let image: NSImage? = {
+        guard
+            let url = Bundle.main.url(forResource: "DuckClipMenuBar", withExtension: "png"),
+            let image = NSImage(contentsOf: url)
+        else { return nil }
+        image.isTemplate = true
+        image.size = NSSize(width: 18, height: 18)
+        return image
+    }()
 }
 
 private struct MenuBarContent: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var settings: DuckClipSettings
     let showPalette: () -> Void
+    let showQuickPaste: () -> Void
 
-    init(model: AppModel, showPalette: @escaping () -> Void) {
+    init(model: AppModel, showPalette: @escaping () -> Void, showQuickPaste: @escaping () -> Void) {
         self.model = model
         _settings = ObservedObject(wrappedValue: model.settings)
         self.showPalette = showPalette
+        self.showQuickPaste = showQuickPaste
     }
 
     var body: some View {
         Button("Open DuckClip (\(settings.globalShortcut.displayName))") { showPalette() }
+        Button(String(format: String(localized: "Quick Paste (%@)"), "⌃⌘V")) { showQuickPaste() }
         if !model.shortcutRegistrationSucceeded {
             Label("The selected shortcut is unavailable", systemImage: "exclamationmark.triangle.fill")
+        }
+        if !model.quickPasteShortcutRegistrationSucceeded {
+            Label("The Quick Paste shortcut is unavailable", systemImage: "exclamationmark.triangle.fill")
         }
         Button(settings.captureEnabled
             ? String(localized: "Pause Clipboard Recording")

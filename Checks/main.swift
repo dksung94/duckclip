@@ -52,6 +52,13 @@ func checkStore() throws {
         try require(try store.search(source: .clipboard).map(\.id) == [clipboard.id], "Source filter failed")
         try require(try store.search(sources: [.claude, .codex]).map(\.id) == [agent.id], "Agent source filter failed")
         try require(try store.search(agentID: "agent-9").map(\.id) == [agent.id], "Agent ID filter failed")
+        let markdownAgent = ClipItem(
+            kind: .agentResponse,
+            source: .codex,
+            text: "### Finished\n\nDetails",
+            contentHash: "markdown-title"
+        )
+        try require(markdownAgent.title == "Finished", "Markdown heading marker leaked into the item title")
         try require(try store.count() == 2, "All item count failed")
         try require(try store.count(sources: [.clipboard]) == 1, "Clipboard item count failed")
         try require(!store.insert(agent), "Agent turn insertion was not idempotent")
