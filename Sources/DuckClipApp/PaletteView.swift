@@ -36,7 +36,12 @@ struct PaletteView: View {
                 onboarding
             }
         }
-        .frame(minWidth: 680, minHeight: 420)
+        .frame(
+            minWidth: 680,
+            maxWidth: .infinity,
+            minHeight: 420,
+            maxHeight: .infinity
+        )
         .background(.ultraThinMaterial)
         .onAppear {
             searchFocused = settings.hasCompletedOnboarding
@@ -94,52 +99,59 @@ struct PaletteView: View {
             Divider()
             footer
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    @ViewBuilder
     private var paletteContent: some View {
-        if model.sourceFilter == .agents {
-            agentWorkspace
-        } else {
-            HSplitView {
-                itemList
-                    .frame(minWidth: 330, idealWidth: 390)
-                preview
-                    .frame(minWidth: 300)
+        Group {
+            if model.sourceFilter == .agents {
+                agentWorkspace
+            } else {
+                HSplitView {
+                    itemList
+                        .frame(minWidth: 330, idealWidth: 390)
+                    preview
+                        .frame(minWidth: 300)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    @ViewBuilder
     private var agentWorkspace: some View {
-        if missingAgentIntegrations && model.filteredSessions.isEmpty {
-            ContentUnavailableView {
-                Label("Agent integrations are not installed", systemImage: "link.badge.plus")
-            } description: {
-                Text("Install the Claude and Codex hooks before DuckClip can collect new responses.")
-            } actions: {
-                Button("Install integrations") { model.installHooks() }
-            }
-        } else if model.filteredSessions.isEmpty {
-            ContentUnavailableView {
-                Label("No agents yet", systemImage: "sparkles")
-            } description: {
-                Text(hasActiveFilters ? "Try a broader search or reset the filters." : "Agent conversations will appear here after an integration sends a response.")
-            } actions: {
-                if hasActiveFilters {
-                    Button("Reset filters") { model.resetFilters() }
+        Group {
+            if missingAgentIntegrations && model.filteredSessions.isEmpty {
+                ContentUnavailableView {
+                    Label("Agent integrations are not installed", systemImage: "link.badge.plus")
+                } description: {
+                    Text("Install the Claude and Codex hooks before DuckClip can collect new responses.")
+                } actions: {
+                    Button("Install integrations") { model.installHooks() }
                 }
-            }
-        } else {
-            HSplitView {
-                agentList
-                    .frame(minWidth: 210, idealWidth: 235, maxWidth: 290)
-                conversationPane
-                    .frame(minWidth: 300, idealWidth: 350)
-                preview
-                    .frame(minWidth: 320)
+            } else if model.filteredSessions.isEmpty {
+                ContentUnavailableView {
+                    Label("No agents yet", systemImage: "sparkles")
+                } description: {
+                    Text(hasActiveFilters ? "Try a broader search or reset the filters." : "Agent conversations will appear here after an integration sends a response.")
+                } actions: {
+                    if hasActiveFilters {
+                        Button("Reset filters") { model.resetFilters() }
+                    }
+                }
+            } else {
+                HSplitView {
+                    agentList
+                        .frame(minWidth: 210, idealWidth: 235, maxWidth: 290)
+                    conversationPane
+                        .frame(minWidth: 300, idealWidth: 350)
+                    preview
+                        .frame(minWidth: 320)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var onboarding: some View {
