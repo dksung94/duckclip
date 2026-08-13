@@ -29,7 +29,7 @@ final class PalettePanelController {
         needsInitialPosition = !panel.setFrameUsingName("DuckClipPalette")
         panel.setFrameAutosaveName("DuckClipPalette")
 
-        panel.contentView = NSHostingView(rootView: PaletteView(
+        let hostingView = NSHostingView(rootView: PaletteView(
             model: model,
             onActivate: { [weak self] item in
                 guard let self else { return }
@@ -55,6 +55,12 @@ final class PalettePanelController {
             },
             onDismiss: { [weak panel] in panel?.orderOut(nil) }
         ))
+        // The palette swaps between two- and three-column layouts. Keep those
+        // intrinsic sizes inside the window instead of allowing SwiftUI to
+        // overwrite a frame chosen by the user or a window manager.
+        hostingView.sizingOptions = []
+        hostingView.autoresizingMask = [.width, .height]
+        panel.contentView = hostingView
 
         if let frontmost = NSWorkspace.shared.frontmostApplication,
            frontmost.bundleIdentifier != Bundle.main.bundleIdentifier,
