@@ -7,68 +7,80 @@
 <p align="center"><strong>Copy once. Find anything. Paste anywhere.</strong></p>
 
 <p align="center">
-  클립보드와 Claude Code·Codex 응답을 한곳에서 검색하고,<br>
-  키보드만으로 원하는 앱에 바로 붙여넣는 로컬 우선 macOS 팔레트.
+  A private macOS clipboard history and AI agent inbox,<br>
+  always one keyboard shortcut away.
 </p>
 
 <p align="center">
-  <a href="#빠른-시작">빠른 시작</a> ·
-  <a href="#두-가지-팔레트">데모</a> ·
-  <a href="#왜-duckclip인가요">왜 DuckClip?</a> ·
-  <a href="#에이전트-알림">에이전트 알림</a> ·
-  <a href="#개인정보-보호">개인정보 보호</a> ·
-  <a href="#개발">개발</a>
+  <a href="#get-started">Get started</a> ·
+  <a href="#quick-paste">Quick Paste</a> ·
+  <a href="#the-full-library">Full library</a> ·
+  <a href="#agent-inbox">Agent inbox</a> ·
+  <a href="#keyboard-shortcuts">Shortcuts</a> ·
+  <a href="#privacy">Privacy</a>
 </p>
 
 <p align="center">
-  <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white">
-  <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white">
+  <img alt="macOS 14 or newer" src="https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white">
   <img alt="Local first" src="https://img.shields.io/badge/data-local--first-20B2AA">
   <img alt="Menu bar app" src="https://img.shields.io/badge/app-menu%20bar-FFD43B">
 </p>
 
 ---
 
-DuckClip은 복사 기록과 코딩 에이전트의 최종 응답을 하나의 검색 가능한 라이브러리로 만듭니다. 깊게 찾을 때는 전체 팔레트, 방금 복사한 것을 바로 붙일 때는 Quick Paste를 사용합니다.
+DuckClip remembers text, links, files, and images you copy. It can also collect finished responses from Claude Code and Codex, so useful answers do not disappear into old sessions.
 
-> DuckClip은 초기 버전입니다. 중요한 정보에 사용하기 전 보존 기간과 개인정보 제외 설정을 확인하세요.
+Use the compact Quick Paste window when you want something recent. Open the full library when you need to search deeper or browse agent conversations.
 
-## 두 가지 팔레트
+> DuckClip is an early release. Review the retention and privacy settings before using it with sensitive information.
 
-### Quick Paste — 생각보다 손이 먼저 움직일 때
-
-<p align="center">
-  <img src="docs/assets/duckclip-quick-paste.png" width="560" alt="DuckClip Quick Paste showing recent clipboard items with Command number shortcuts">
-</p>
-
-`⌃⌘V`를 누르면 최근 클립보드 9개만 담은 작은 패널이 열립니다. 검색하거나 방향키로 고를 수 있고, `⌘1`~`⌘9`를 누르면 해당 항목이 원래 앱에 즉시 붙여넣어집니다. 텍스트·URL·이미지·파일은 썸네일과 원본 앱으로 구분됩니다.
-
-### 전체 팔레트 — 기록과 에이전트 응답을 깊게 찾을 때
+## Quick Paste
 
 <p align="center">
-  <img src="docs/assets/duckclip-demo.png" width="1080" alt="DuckClip three-column agent navigator showing agents, conversations, and response detail">
+  <img src="docs/assets/duckclip-quick-paste.png" width="560" alt="DuckClip Quick Paste showing recent clipboard items with Command-number shortcuts">
 </p>
 
-`⇧⌘V`로 전체 팔레트를 열면 클립보드는 `목록 → 미리보기`, 에이전트 응답은 `에이전트 → 대화 → 본문` 순서로 탐색합니다. 프로젝트 필터와 전체 검색으로 긴 기록을 좁힌 뒤, `Return`으로 붙여넣거나 `⌘C`로 다시 복사할 수 있습니다.
+Press `⌃⌘V` to open a lightweight list of your nine most recent clipboard items.
 
-에이전트 본문은 Markdown 제목·문단·목록을 보존합니다. 현재 필터에 가려진 새 캡처도 상단 배너가 알려줍니다.
+- Press `⌘1` through `⌘9` to paste an item immediately.
+- Type to search the recent list.
+- Use `↑` and `↓`, then press `Return`.
+- Recognize text, URLs, images, and files by their icons, thumbnails, and source apps.
+- See the destination app before anything is pasted.
 
-## 왜 DuckClip인가요?
+Quick Paste closes as soon as the item is sent, so you can stay focused on the app you were already using.
 
-클립보드 도구는 복사 기록만, 에이전트 도구는 각자의 세션만 보여주는 경우가 많습니다. DuckClip은 둘 사이에서 반복되는 탐색과 복사를 줄입니다.
+## The full library
 
-| 불편함 | 보통 생기는 일 | DuckClip의 방식 |
-| --- | --- | --- |
-| 방금 복사한 내용을 잃음 | 원본 앱과 문서를 다시 찾음 | 고정 항목 우선 + 최신순 타임라인 |
-| 스크린샷이 전부 비슷함 | 파일 크기만 보고 하나씩 열어봄 | 썸네일, 해상도, 용량, 원본 앱 표시 |
-| 에이전트 답변이 여러 세션에 흩어짐 | Claude와 Codex를 번갈아 탐색 | 에이전트 → 대화 → 본문의 3단 탐색 |
-| 방금 복사한 항목을 다시 붙임 | 전체 기록 창을 열고 항목을 찾음 | Quick Paste에서 `⌘1`~`⌘9`로 즉시 붙여넣기 |
-| 에이전트가 질문했는데 놓침 | 작업이 입력 대기 상태로 멈춤 | 완료·입력·승인·실패 알림을 개별 제어 |
-| 붙여넣기 목적지가 불분명함 | 엉뚱한 앱으로 전송할 수 있음 | `Safari에 붙여넣기`처럼 대상 앱을 명시 |
+<p align="center">
+  <img src="docs/assets/duckclip-demo.png" width="1080" alt="DuckClip agent library showing agents, conversations, and response details in three columns">
+</p>
 
-## 빠른 시작
+Press `⇧⌘V` when you need the complete DuckClip library.
 
-요구 사항: macOS 14 이상, Swift 6 도구 체인, Xcode Command Line Tools.
+- Search across clipboard history and agent responses.
+- Filter by source and project.
+- Pin important items above the regular timeline.
+- Preview screenshots with their dimensions and file size.
+- Preview URLs and copied files before using them.
+- Copy an item again or paste it back into the app you came from.
+
+The clipboard view uses a simple list and preview. The Agents view uses three clear steps: **agent → conversation → response**. Agent responses preserve Markdown headings, paragraphs, and lists.
+
+## Why DuckClip?
+
+| When this happens | DuckClip helps by |
+| --- | --- |
+| A recent copy is replaced before you paste it | Keeping a searchable history, with pinned items at the top |
+| Screenshots all look alike | Showing thumbnails, dimensions, file size, and source app |
+| Claude and Codex answers are spread across sessions | Organizing them as agent → conversation → response |
+| You only need the thing you copied a moment ago | Letting you paste it with `⌘1` through `⌘9` in Quick Paste |
+| An agent finishes or needs your attention | Sending optional completion, input, approval, and failure notifications |
+| You are unsure where an item will go | Naming the destination app before paste |
+
+## Get started
+
+DuckClip currently supports macOS 14 or newer. Until packaged downloads are available, build the app with Swift 6 and the Xcode Command Line Tools:
 
 ```bash
 git clone https://github.com/dksung94/duckclip.git
@@ -79,113 +91,70 @@ ditto dist/DuckClip.app /Applications/DuckClip.app
 open /Applications/DuckClip.app
 ```
 
-처음 실행하면 로컬 저장 방식과 기본 단축키를 안내합니다. 자동 붙여넣기와 에이전트 알림은 필요할 때만 권한을 요청합니다.
+DuckClip appears as a duck in the menu bar and does not take up space in the Dock. The first-run guide explains local storage and the default shortcuts.
 
-메뉴바에는 문서 대신 단색 오리 아이콘이 표시되며, 기록 일시 정지나 단축키 오류가 있으면 상태 아이콘으로 바뀝니다.
+Automatic paste needs macOS Accessibility permission. DuckClip asks for it only when you enable or use a feature that pastes on your behalf. You can still copy an item without granting that permission.
 
-### Claude Code와 Codex 연결
+## What DuckClip remembers
 
-DuckClip에서 `설정 → Agents → Connections → Install or Update Integrations`를 누릅니다. 설치 후 각 공급자의 `Test` 버튼으로 이벤트 전달을 확인할 수 있습니다.
+- Text and URLs
+- Files copied from Finder
+- Screenshots and other clipboard images
+- Final responses from Claude Code
+- Final responses from Codex
+- The project, agent, and session information attached to those responses
 
-Codex가 새 훅의 신뢰 여부를 물으면 Codex에서 `/hooks`를 실행해 확인하세요. DuckClip은 기존 훅을 보존하고 자신이 관리하는 명령만 추가하거나 제거합니다.
+Unpinned items can be kept for 1 to 365 days. You choose the retention period in Settings.
 
-## 무엇을 기억하나요?
+## Agent inbox
 
-- 텍스트와 URL
-- Finder에서 복사한 파일
-- 스크린샷과 일반 이미지
-- Claude Code 최종 응답
-- Codex 최종 응답
-- 프로젝트, 에이전트, 세션 메타데이터
+To connect Claude Code and Codex:
 
-검색은 SQLite FTS5를 사용하며, 이미지는 앱의 로컬 Blob 저장소에 보관합니다. 고정하지 않은 항목의 보존 기간은 1일에서 365일까지 설정할 수 있습니다.
+1. Open **Settings → Agents → Connections**.
+2. Select **Install or Update Integrations**.
+3. Use the **Test** button beside each provider to confirm that events are arriving.
 
-## 에이전트 알림
+If Codex asks whether a new hook should be trusted, run `/hooks` in Codex and review it there. DuckClip preserves your existing hooks and only manages its own entries.
 
-`설정 → Agents → Notifications`에서 필요한 알림만 켤 수 있습니다.
+### Notifications
 
-| 알림 | 의미 |
+Open **Settings → Agents → Notifications** to choose exactly which events should interrupt you.
+
+| Notification | What it means |
 | --- | --- |
-| 응답 완료 | Claude Code 또는 Codex가 최종 답변을 마침 |
-| 사용자 입력 대기 | 에이전트가 선택이나 추가 정보를 기다림 |
-| 승인 필요 | 도구 실행 또는 권한 승인이 필요함 |
-| 에이전트 실패 | 에이전트가 오류로 중단됨 |
+| Response completed | Claude Code or Codex finished a response |
+| Waiting for your input | The agent needs a choice or more information |
+| Approval required | A tool or permission is waiting for approval |
+| Agent failed | The agent stopped because of an error |
 
-알림 내용은 `상태만`, `응답 미리보기`, `숨김` 중에서 선택할 수 있으며, 설정 화면에서 네 종류를 각각 테스트할 수 있습니다. 실제 이벤트 지원 범위는 설치된 Claude Code·Codex 훅 버전에 따라 달라질 수 있습니다.
+Notification previews can show status only, the first line of a response, or no response content. Each notification type has its own test action. Available events can vary with the installed Claude Code or Codex hook version.
 
-## 키보드로 끝내기
+## Keyboard shortcuts
 
-| 키 | 동작 |
+| Shortcut | Action |
 | --- | --- |
-| `⇧⌘V` | DuckClip 열기 |
-| `⌃⌘V` | Quick Paste 열기 |
-| `⌘1` … `⌘9` | Quick Paste의 해당 항목 즉시 붙여넣기 |
-| `↑` `↓` | 항목 이동 |
-| `Return` | 선택 항목 붙여넣기 또는 복사 |
-| `⌘C` | 선택 항목 복사 |
-| `Delete` | 선택 항목 삭제 |
-| `⌘Z` | 최근 삭제 실행 취소 |
-| `Esc` | 팔레트 닫기 |
+| `⇧⌘V` | Open the full DuckClip library |
+| `⌃⌘V` | Open Quick Paste |
+| `⌘1` … `⌘9` | Paste the matching Quick Paste item immediately |
+| `↑` `↓` | Move through items |
+| `Return` | Paste or copy the selected item |
+| `⌘C` | Copy the selected item |
+| `Delete` | Delete the selected item |
+| `⌘Z` | Undo the most recent deletion |
+| `Esc` | Close the current palette |
 
-전체 팔레트 단축키는 설정에서 `⇧⌘V`, `⌥⌘V`, `⌃⌥V` 중 선택할 수 있습니다. Quick Paste는 `⌃⌘V`를 사용합니다. 단축키 등록에 실패하면 메뉴바와 설정에서 바로 알려줍니다.
+The full-library shortcut can be changed to `⇧⌘V`, `⌥⌘V`, or `⌃⌥V` in Settings. Quick Paste uses `⌃⌘V`. If macOS or another app has already claimed a shortcut, DuckClip shows the conflict in the menu bar and Settings.
 
-## 개인정보 보호
+## Privacy
 
-DuckClip은 클라우드 동기화 없이 이 Mac 안에서만 동작합니다.
+DuckClip is local-first. There is no cloud account or clipboard sync, and its data stays in `~/Library/Application Support/DuckClip`.
 
-- 비밀번호 관리자와 concealed/transient pasteboard 콘텐츠는 기본적으로 기록하지 않습니다.
-- 기록에서 제외할 애플리케이션을 직접 선택할 수 있습니다.
-- 에이전트 응답에서 제외할 프로젝트 폴더를 지정할 수 있습니다.
-- 자동 붙여넣기에만 macOS 손쉬운 사용 권한이 필요합니다.
-- Quick Paste의 즉시 붙여넣기도 같은 손쉬운 사용 권한을 사용하며, 권한이 없으면 복사로 전환할 수 있습니다.
-- 알림 권한은 사용자가 에이전트 알림을 켜는 시점에만 요청합니다.
-
-저장 위치는 `~/Library/Application Support/DuckClip`입니다.
-
-## 동작 방식
-
-```mermaid
-flowchart LR
-    A[macOS Clipboard] --> M[Clipboard Monitor]
-    B[Claude Code] --> H[Managed Hooks]
-    C[Codex] --> H
-    M --> S[(SQLite FTS5<br>+ Local Blobs)]
-    H --> S
-    S --> P[DuckClip Palette]
-    P --> D[Copy]
-    P --> E[Paste to active app]
-    H --> N[macOS Notifications]
-```
-
-DuckClip은 메뉴바 앱으로 실행되며 Dock을 차지하지 않습니다. 팔레트는 현재 작업 중인 디스플레이에 나타나고, 마지막 위치와 크기를 기억합니다.
-
-## 개발
-
-```bash
-# 디버그 빌드
-swift build --product DuckClip
-
-# XCTest 없이 실행 가능한 핵심 검사
-swift run DuckClipChecks
-
-# 릴리스 앱 번들 생성
-./scripts/build-app.sh
-
-# Claude/Codex 연동 상태 확인
-swift run duckclipctl status \
-  --helper dist/DuckClip.app/Contents/MacOS/duckclip-hook
-```
-
-주요 구성:
-
-```text
-Sources/DuckClipApp/     전체/Quick Paste 팔레트, 설정, 메뉴바, 알림
-Sources/DuckClipCore/    저장소, 검색, 캡처, 훅, 붙여넣기
-Sources/DuckClipHook/    Claude/Codex 이벤트 수집 helper
-Sources/DuckClipCtl/     연동 설치·진단 CLI
-Checks/                  독립 실행형 핵심 검사
-scripts/                 앱 패키징과 배포 스크립트
-```
+- Password-manager and protected or temporary pasteboard content is not recorded by default.
+- You can exclude specific applications from clipboard recording.
+- You can exclude project folders and their descendants from agent response collection.
+- Accessibility permission is used only for automatic paste and Quick Paste.
+- Notification permission is requested only when you turn on agent notifications.
+- Pausing clipboard recording is always available from the menu bar.
 
 ---
 
