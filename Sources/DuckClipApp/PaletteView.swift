@@ -11,6 +11,7 @@ struct PaletteView: View {
     let onDismiss: () -> Void
 
     @FocusState private var searchFocused: Bool
+    @FocusState private var replyFocusedItemID: String?
 
     init(
         model: AppModel,
@@ -451,6 +452,7 @@ struct PaletteView: View {
             TextField("Write a follow-up…", text: $model.agentReplyDraft, axis: .vertical)
                 .lineLimit(2...5)
                 .textFieldStyle(.plain)
+                .focused($replyFocusedItemID, equals: item.id)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .background(.quaternary.opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
@@ -473,6 +475,7 @@ struct PaletteView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut(replyFocusedItemID == item.id ? .defaultAction : nil)
                 .disabled(unavailableReason != nil || !hasPrompt || model.isSendingAgentReply)
             }
         }
@@ -552,7 +555,7 @@ struct PaletteView: View {
 
                     Button(primaryActionLabel) { onActivate(item) }
                         .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.defaultAction)
+                        .keyboardShortcut(replyFocusedItemID == nil ? .defaultAction : nil)
                 }
                 Button("Close") { onDismiss() }
                     .keyboardShortcut(.escape, modifiers: [])
