@@ -12,6 +12,7 @@
 </p>
 
 <p align="center">
+  <a href="#latest-features">Latest features</a> ·
   <a href="#get-started">Get started</a> ·
   <a href="#quick-paste">Quick Paste</a> ·
   <a href="#the-full-library">Full library</a> ·
@@ -29,19 +30,21 @@
 
 ---
 
-DuckClip remembers text, links, files, and images you copy. It can also collect finished responses from Claude Code, Codex, Gajae Code, Gemini CLI, GitHub Copilot CLI, Cursor, and OpenCode, so useful answers do not disappear into old sessions.
+DuckClip remembers text, links, files, and images you copy. It can also collect finished responses from Claude Code, Codex, Gajae Code, Gemini CLI, GitHub Copilot CLI, Cursor, and OpenCode, keeping the original question beside each answer whenever the agent makes it available.
 
 Use the compact Quick Paste window when you want something recent. Open the full library when you need to search deeper or browse agent conversations.
 
 > DuckClip is an early release. Review the retention and privacy settings before using it with sensitive information.
 
-## What's new in 0.2
+## Latest features
 
 - Write a follow-up beneath any collected agent response and send it back to the session that is still running.
-- See the user question that led to each collected response, including existing Codex and Claude history after a one-time local backfill.
+- Read the original question directly above its answer. Short questions stay compact; longer questions grow naturally and become scrollable only when needed.
+- Recover question-and-answer context from existing Codex and Claude history with a one-time local scan.
 - Reach the exact local tmux pane even when it is hidden behind another pane, plus cmux, Terminal, and iTerm sessions.
 - Press `Return` while the follow-up field is focused to send the reply instead of triggering the clipboard action.
 - Keep a Rectangle-managed full-screen or half-screen window size while moving between Clipboard and Agents.
+- Leave the full library open while you reference another app. Quick Paste remains lightweight and disappears when it loses focus.
 - Open Quick Paste only with `⌃⌘V`; opening the regular library never brings up the compact panel.
 
 ## Quick Paste
@@ -59,6 +62,7 @@ Press `⌃⌘V` to open a lightweight list of your nine most recent clipboard it
 - See the destination app before anything is pasted.
 
 Quick Paste closes as soon as the item is sent, so you can stay focused on the app you were already using.
+Clicking another app also dismisses Quick Paste without closing DuckClip itself.
 
 ## The full library
 
@@ -70,13 +74,15 @@ Press `⇧⌘V` when you need the complete DuckClip library.
 
 - Search across clipboard history and agent responses.
 - Filter by source and project.
+- See the question that produced an agent answer without opening the original terminal session.
 - Reply directly to the terminal tab that is still running an agent conversation.
 - Pin important items above the regular timeline.
 - Preview screenshots with their dimensions and file size.
 - Preview URLs and copied files before using them.
 - Copy an item again or paste it back into the app you came from.
+- Keep the library visible while working in another app.
 
-The clipboard view uses a simple list and preview. The Agents view uses three clear steps: **agent → conversation → response**. Each response can show the user question that prompted it, and agent answers preserve Markdown headings, paragraphs, and lists.
+The clipboard view uses a simple list and preview. The Agents view uses three clear steps: **agent → conversation → response**. Conversation rows use the original question as their title when available. The response preview places that question in a compact, adaptive card above the answer, while agent answers preserve Markdown headings, paragraphs, and lists.
 
 ## Why DuckClip?
 
@@ -85,8 +91,10 @@ The clipboard view uses a simple list and preview. The Agents view uses three cl
 | A recent copy is replaced before you paste it | Keeping a searchable history, with pinned items at the top |
 | Screenshots all look alike | Showing thumbnails, dimensions, file size, and source app |
 | Coding-agent answers are spread across tools and sessions | Organizing them as agent → conversation → response |
+| An old agent answer no longer makes sense by itself | Keeping the original question and answer together |
 | You only need the thing you copied a moment ago | Letting you paste it with `⌘1` through `⌘9` in Quick Paste |
 | An agent finishes or needs your attention | Sending optional completion, input, approval, and failure notifications |
+| You need to reference another app while reading an answer | Keeping the full library visible until you close it |
 | You are unsure where an item will go | Naming the destination app before paste |
 
 ## Get started
@@ -109,6 +117,7 @@ Automatic paste needs macOS Accessibility permission. DuckClip asks for it only 
 - Files copied from Finder
 - Screenshots and other clipboard images
 - Final responses from Claude Code, Codex, Gajae Code, Gemini CLI, GitHub Copilot CLI, Cursor, and OpenCode
+- The user question behind an agent response when the integration or local session history exposes it
 - The project, agent, and session information attached to those responses
 
 Unpinned items can be kept for 1 to 365 days. You choose the retention period in Settings.
@@ -122,9 +131,9 @@ To connect your coding agents:
 3. Restart any agent that was already open.
 4. Use the **Test** button beside each provider to confirm that events are arriving.
 
-DuckClip uses each agent’s supported integration surface: native hooks for Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, and Cursor; a Gajae Code extension; and an OpenCode plugin. It preserves existing hook settings and only manages its own entries and files.
+The same setup flow connects Claude Code, Codex, Gajae Code, Gemini CLI, GitHub Copilot CLI, Cursor, and OpenCode. Installing or updating a DuckClip connection preserves your existing agent settings and only changes entries owned by DuckClip.
 
-Select any collected response to write a follow-up. **Send to Session** finds the process that still owns the matching session file and sends your prompt to that exact local tmux pane, cmux, Terminal, or iTerm surface. A tmux pane does not need to be visible or selected. DuckClip never starts a second writer for an active session, and it stops safely if the original session is no longer running.
+Select any collected response to see its original question above the answer and write a follow-up below it. The question card uses only the space its text needs, up to a comfortable scrollable limit. **Send to Session** finds the process that still owns the matching session file and sends your prompt to that exact local tmux pane, cmux, Terminal, or iTerm surface. A tmux pane does not need to be visible or selected. DuckClip never starts a second writer for an active session, and it stops safely if the original session is no longer running.
 
 Live replies currently target sessions running on the same Mac as DuckClip. Sessions inside tmux on an SSH server need a remote bridge and are not supported yet.
 
