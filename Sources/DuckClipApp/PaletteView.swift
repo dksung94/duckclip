@@ -37,9 +37,9 @@ struct PaletteView: View {
             }
         }
         .frame(
-            minWidth: 680,
+            minWidth: PaletteLayoutMetrics.minimumWindowWidth,
             maxWidth: .infinity,
-            minHeight: 420,
+            minHeight: PaletteLayoutMetrics.minimumWindowHeight,
             maxHeight: .infinity
         )
         .background(.ultraThinMaterial)
@@ -109,10 +109,13 @@ struct PaletteView: View {
             } else {
                 HSplitView {
                     itemList
-                        .frame(minWidth: 330, idealWidth: 390)
+                        .frame(
+                            minWidth: PaletteLayoutMetrics.clipboardListMinimumWidth,
+                            idealWidth: PaletteLayoutMetrics.clipboardListIdealWidth
+                        )
                         .frame(maxHeight: .infinity)
                     preview
-                        .frame(minWidth: 300)
+                        .frame(minWidth: PaletteLayoutMetrics.previewMinimumWidth)
                         .frame(maxHeight: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -144,13 +147,20 @@ struct PaletteView: View {
             } else {
                 HSplitView {
                     agentList
-                        .frame(minWidth: 210, idealWidth: 235, maxWidth: 290)
+                        .frame(
+                            minWidth: PaletteLayoutMetrics.agentListMinimumWidth,
+                            idealWidth: PaletteLayoutMetrics.agentListIdealWidth,
+                            maxWidth: PaletteLayoutMetrics.agentListMaximumWidth
+                        )
                         .frame(maxHeight: .infinity)
                     conversationPane
-                        .frame(minWidth: 300, idealWidth: 350)
+                        .frame(
+                            minWidth: PaletteLayoutMetrics.conversationMinimumWidth,
+                            idealWidth: PaletteLayoutMetrics.conversationIdealWidth
+                        )
                         .frame(maxHeight: .infinity)
                     preview
-                        .frame(minWidth: 320)
+                        .frame(minWidth: PaletteLayoutMetrics.agentPreviewMinimumWidth)
                         .frame(maxHeight: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -230,6 +240,7 @@ struct PaletteView: View {
                         Text("\(filter.displayName) \(model.itemCounts[filter])").tag(filter)
                     }
                 }
+                .labelsHidden()
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 350)
 

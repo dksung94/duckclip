@@ -28,7 +28,12 @@ final class PalettePanelController {
         panel.hidesOnDeactivate = false
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.minSize = NSSize(width: 900, height: 480)
+        // Keep the minimum below half of a common 1512-point MacBook display
+        // so external window managers can honor an exact half-screen layout.
+        panel.minSize = NSSize(
+            width: PaletteLayoutMetrics.minimumWindowWidth,
+            height: PaletteLayoutMetrics.minimumWindowHeight
+        )
         needsInitialPosition = !panel.setFrameUsingName("DuckClipPalette")
         panel.setFrameAutosaveName("DuckClipPalette")
 
